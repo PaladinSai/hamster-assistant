@@ -1,0 +1,57 @@
+# Dependencies & frontend build
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+src-tauri/WixTools/
+src-tauri/.cargo-ok
+
+# Packaged installers / local release copies
+release/
+bundle/
+*.exe
+*.msi
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+
+# Local DBs (keep packaged seeds under resources/)
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+!src-tauri/resources/
+!src-tauri/resources/catalog.sqlite
+!src-tauri/resources/user.sqlite
+
+# Env / secrets
+.env
+.env.*
+
+# Logs & scratch / caches
+*.log
+npm-debug.log*
+tmp/
+tools/_cache/
+seed_out/
+upstream/
+*.cache
+_query_*
+_patch_*.py
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

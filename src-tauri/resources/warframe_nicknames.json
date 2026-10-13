@@ -1,0 +1,327 @@
+[
+  {
+    "family_key": "Ash",
+    "name_zh": "灰烬之刃",
+    "nickname": "阿屎"
+  },
+  {
+    "family_key": "Atlas",
+    "name_zh": "撼天行者",
+    "nickname": "土甲"
+  },
+  {
+    "family_key": "Banshee",
+    "name_zh": "恸哭女妖",
+    "nickname": "音妈"
+  },
+  {
+    "family_key": "Baruuk",
+    "name_zh": "巴鲁克",
+    "nickname": "佛甲"
+  },
+  {
+    "family_key": "Caliban",
+    "name_zh": "卡利班",
+    "nickname": "儿子"
+  },
+  {
+    "family_key": "Chroma",
+    "name_zh": "怒炎龙骑",
+    "nickname": "龙"
+  },
+  {
+    "family_key": "Citrine",
+    "name_zh": "黄水晶",
+    "nickname": "水晶"
+  },
+  {
+    "family_key": "Cyte-09",
+    "name_zh": "Cyte-09",
+    "nickname": "狙击甲"
+  },
+  {
+    "family_key": "Dagath",
+    "name_zh": "达加斯",
+    "nickname": "马头"
+  },
+  {
+    "family_key": "Dante",
+    "name_zh": "但丁",
+    "nickname": "书甲"
+  },
+  {
+    "family_key": "Ember",
+    "name_zh": "永恒烈焰",
+    "nickname": "火鸡"
+  },
+  {
+    "family_key": "Equinox",
+    "name_zh": "阴阳双子",
+    "nickname": "扶他"
+  },
+  {
+    "family_key": "Excalibur",
+    "name_zh": "圣剑",
+    "nickname": "咖喱"
+  },
+  {
+    "family_key": "Follie",
+    "name_zh": "Follie",
+    "nickname": "墨水"
+  },
+  {
+    "family_key": "Frost",
+    "name_zh": "冰雪寒霜",
+    "nickname": "冰男"
+  },
+  {
+    "family_key": "Gara",
+    "name_zh": "琉璃侍女",
+    "nickname": "玻璃"
+  },
+  {
+    "family_key": "Garuda",
+    "name_zh": "嘎噜达",
+    "nickname": "血妈"
+  },
+  {
+    "family_key": "Gauss",
+    "name_zh": "高斯",
+    "nickname": "高斯"
+  },
+  {
+    "family_key": "Grendel",
+    "name_zh": "格伦德尔",
+    "nickname": "肥宅"
+  },
+  {
+    "family_key": "Gyre",
+    "name_zh": "盖尔",
+    "nickname": "电妹"
+  },
+  {
+    "family_key": "Harrow",
+    "name_zh": "驱魔使者",
+    "nickname": "主教"
+  },
+  {
+    "family_key": "Hildryn",
+    "name_zh": "希尔德琳",
+    "nickname": "母牛"
+  },
+  {
+    "family_key": "Hydroid",
+    "name_zh": "惊涛骇浪",
+    "nickname": "水男"
+  },
+  {
+    "family_key": "Inaros",
+    "name_zh": "沙海怒涛",
+    "nickname": "沙甲"
+  },
+  {
+    "family_key": "Ivara",
+    "name_zh": "神弓游侠",
+    "nickname": "弓妹"
+  },
+  {
+    "family_key": "Jade",
+    "name_zh": "Jade",
+    "nickname": "翡翠"
+  },
+  {
+    "family_key": "Khora",
+    "name_zh": "荒野猎手",
+    "nickname": "猫甲"
+  },
+  {
+    "family_key": "Koumei",
+    "name_zh": "命美",
+    "nickname": "骰子"
+  },
+  {
+    "family_key": "Kullervo",
+    "name_zh": "库勒沃",
+    "nickname": "刀哥"
+  },
+  {
+    "family_key": "Lavos",
+    "name_zh": "拉沃斯",
+    "nickname": "蛇甲"
+  },
+  {
+    "family_key": "Limbo",
+    "name_zh": "灵薄狱",
+    "nickname": "小明"
+  },
+  {
+    "family_key": "Loki",
+    "name_zh": "邪神洛基",
+    "nickname": "洛基"
+  },
+  {
+    "family_key": "Mag",
+    "name_zh": "磁力",
+    "nickname": "磁妹"
+  },
+  {
+    "family_key": "Mesa",
+    "name_zh": "圣枪弥撒",
+    "nickname": "女枪"
+  },
+  {
+    "family_key": "Mirage",
+    "name_zh": "魅影精灵",
+    "nickname": "小丑"
+  },
+  {
+    "family_key": "Nekros",
+    "name_zh": "亡灵梦魇",
+    "nickname": "摸尸"
+  },
+  {
+    "family_key": "Nezha",
+    "name_zh": "哪吒三太子",
+    "nickname": "哪吒"
+  },
+  {
+    "family_key": "Nidus",
+    "name_zh": "疫变之巢",
+    "nickname": "蛆甲"
+  },
+  {
+    "family_key": "Nokko",
+    "name_zh": "Nokko",
+    "nickname": "蘑菇"
+  },
+  {
+    "family_key": "Nova",
+    "name_zh": "超能新星",
+    "nickname": "加速"
+  },
+  {
+    "family_key": "Nyx",
+    "name_zh": "冥河夜神",
+    "nickname": "脑溢血"
+  },
+  {
+    "family_key": "Oberon",
+    "name_zh": "龙王奥伯",
+    "nickname": "奶爸"
+  },
+  {
+    "family_key": "Octavia",
+    "name_zh": "吟游歌者",
+    "nickname": "DJ"
+  },
+  {
+    "family_key": "Oraxia",
+    "name_zh": "Oraxia",
+    "nickname": "蜘蛛"
+  },
+  {
+    "family_key": "Protea",
+    "name_zh": "普罗提亚",
+    "nickname": "茶妹"
+  },
+  {
+    "family_key": "Qorvex",
+    "name_zh": "Qorvex",
+    "nickname": "辐射"
+  },
+  {
+    "family_key": "Revenant",
+    "name_zh": "复仇亡灵",
+    "nickname": "夜灵"
+  },
+  {
+    "family_key": "Rhino",
+    "name_zh": "狂野犀牛",
+    "nickname": "牛"
+  },
+  {
+    "family_key": "Saryn",
+    "name_zh": "剧毒之触",
+    "nickname": "毒妈"
+  },
+  {
+    "family_key": "Sevagoth",
+    "name_zh": "塞瓦高斯",
+    "nickname": "鬼甲"
+  },
+  {
+    "family_key": "Sirius & Orion",
+    "name_zh": "双子",
+    "nickname": "双子"
+  },
+  {
+    "family_key": "Styanax",
+    "name_zh": "斯提亚纳克斯",
+    "nickname": "斯巴达"
+  },
+  {
+    "family_key": "Temple",
+    "name_zh": "Temple",
+    "nickname": "摇滚"
+  },
+  {
+    "family_key": "Titania",
+    "name_zh": "幻蝶仙灵",
+    "nickname": "蝶甲"
+  },
+  {
+    "family_key": "Trinity",
+    "name_zh": "三位一体",
+    "nickname": "奶妈"
+  },
+  {
+    "family_key": "Uriel",
+    "name_zh": "Uriel",
+    "nickname": "恶魔"
+  },
+  {
+    "family_key": "Valkyr",
+    "name_zh": "瓦尔基里",
+    "nickname": "瓦喵"
+  },
+  {
+    "family_key": "Vauban",
+    "name_zh": "工程统帅",
+    "nickname": "工程"
+  },
+  {
+    "family_key": "Volt",
+    "name_zh": "伏特",
+    "nickname": "电男"
+  },
+  {
+    "family_key": "Voruna",
+    "name_zh": "沃鲁娜",
+    "nickname": "狼甲"
+  },
+  {
+    "family_key": "Wisp",
+    "name_zh": "萤草",
+    "nickname": "花"
+  },
+  {
+    "family_key": "Wukong",
+    "name_zh": "齐天大圣",
+    "nickname": "猴子"
+  },
+  {
+    "family_key": "Xaku",
+    "name_zh": "Xaku",
+    "nickname": "骨甲"
+  },
+  {
+    "family_key": "Yareli",
+    "name_zh": "雅瑞莉",
+    "nickname": "鸭梨"
+  },
+  {
+    "family_key": "Zephyr",
+    "name_zh": "狂啸西风",
+    "nickname": "鸟姐"
+  }
+]

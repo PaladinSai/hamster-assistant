@@ -1,0 +1,26 @@
+{
+  "steel": [
+    ["Braton", "Lato", "Skana", "Paris", "Kunai"],
+    ["Boar", "Gammacor", "Angstrum", "Gorgon", "Anku"],
+    ["Bo", "Latron", "Furis", "Furax", "Strun"],
+    ["Lex", "Magistar", "Boltor", "Bronco", "CeramicDagger"],
+    ["Torid", "DualToxocyst", "DualIchor", "Miter", "Atomos"],
+    ["AckAndBrunt", "Soma", "Vasto", "NamiSolo", "Burston"],
+    ["Zylok", "Sibear", "Dread", "Despair", "Hate"],
+    ["Dera", "Sybaris", "Cestra", "Sicarus", "Okina"],
+    ["Vectis", "Stug", "Ballistica", "Destreza", "Obex"]
+  ],
+  "normal": [
+    ["Excalibur", "Trinity", "Ember"],
+    ["Loki", "Mag", "Rhino"],
+    ["Ash", "Frost", "Nyx"],
+    ["Saryn", "Vauban", "Nova"],
+    ["Nekros", "Valkyr", "Oberon"],
+    ["Hydroid", "Mirage", "Limbo"],
+    ["Mesa", "Chroma", "Atlas"],
+    ["Ivara", "Inaros", "Titania"],
+    ["Nidus", "Octavia", "Harrow"],
+    ["Gara", "Khora", "Revenant"],
+    ["Garuda", "Baruuk", "Hildryn"]
+  ]
+}
