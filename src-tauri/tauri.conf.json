@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "仓鼠小助手",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "identifier": "hamster-assistant",
   "build": {
     "beforeDevCommand": "npm run dev",
