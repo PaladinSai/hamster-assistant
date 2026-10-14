@@ -26,6 +26,8 @@ npm run build          # 仅前端
 npm run tauri -- build --bundles nsis   # Windows 安装包
 ```
 
+安装包 / 安装目录名为英文 `Hamster Assistant`（避免 CI 丢中文文件名）；开始菜单、桌面快捷方式与「应用和功能」通过自定义 NSIS 模板显示「仓鼠小助手」，窗口标题仍为中文。
+
 ## 数据库
 
 启动时若 AppData 无库，从安装包种子拷贝 `catalog.sqlite` / `user.sqlite`；版本低则升级。

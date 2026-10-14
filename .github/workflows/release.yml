@@ -47,8 +47,9 @@ jobs:
           tagName: v__VERSION__
           releaseName: '仓鼠小助手 v__VERSION__'
           releaseBody: |
-            下载下方 Assets 中的 `.exe` 安装包进行安装。
+            下载下方 Assets 中的 `Hamster Assistant_*_x64-setup.exe` 安装包进行安装。
 
+            安装后开始菜单、桌面快捷方式与「应用和功能」显示为「仓鼠小助手」。
             Windows 数据目录：`%APPDATA%\hamster-assistant\`
           releaseDraft: false
           prerelease: false
