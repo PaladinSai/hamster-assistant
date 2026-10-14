@@ -9,8 +9,24 @@ use crate::catalog::live_world::types::{BountyBoardApi, BountyBriefApi, BountyJo
 #[derive(Debug, Deserialize)]
 pub(crate) struct DeBountyCycle {
     pub(crate) expiry: Option<i64>,
+    /// 当前 A/B/C 轮换（如 `"B"`）；cycle 补齐任务写入 `reward_table` 供掉落匹配。
+    #[serde(default)]
+    pub(crate) rot: Option<String>,
     #[serde(default)]
     pub(crate) bounties: std::collections::HashMap<String, Vec<DeCycleJob>>,
+}
+
+/// 把 bounty-cycle `rot` 编成可被 `parse_reward_rotation` 识别的伪路径。
+fn cycle_reward_table(rot: Option<&str>) -> String {
+    let Some(raw) = rot.map(str::trim).filter(|s| !s.is_empty()) else {
+        return String::new();
+    };
+    let ch = raw.chars().next().unwrap_or('\0').to_ascii_uppercase();
+    if matches!(ch, 'A' | 'B' | 'C') {
+        format!("TierATable{ch}Rewards")
+    } else {
+        String::new()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,6 +99,7 @@ pub(super) fn parse_bounties(
         if jobs.is_empty() && localize_bounty::is_cycle_filled_syndicate(tag) {
             if let Some(cycle) = cycle {
                 if let Some(entries) = cycle.bounties.get(*tag) {
+                    let reward_table = cycle_reward_table(cycle.rot.as_deref());
                     for (idx, entry) in entries.iter().enumerate() {
                         let challenge = entry.challenge.as_deref().unwrap_or("").to_string();
                         let node = entry.node.as_deref().unwrap_or("");
@@ -107,7 +124,7 @@ pub(super) fn parse_bounties(
                             is_steel_path: false,
                             challenge_zh,
                             rewards: vec![],
-                            reward_table: String::new(),
+                            reward_table: reward_table.clone(),
                         });
                     }
                     filled_from_cycle = !jobs.is_empty();

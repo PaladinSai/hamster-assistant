@@ -106,7 +106,7 @@ pub(crate) fn attach_drop_rewards(
             }
             let rotation =
                 parse_reward_rotation(&job.reward_table).or(board_rotation);
-            let items = match_tier_items(tiers, job, rotation);
+            let items = match_tier_items(&board.tag, tiers, job, rotation);
             if items.is_empty() {
                 continue;
             }
@@ -186,18 +186,30 @@ fn tiers_for_tag<'a>(tables: &'a DropBountyTables, tag: &str) -> &'a [DropBounty
     }
 }
 
+/// 六人组：游戏内等级比官方 drop-all 标签高约 10，匹配时用降档后的等级。
+fn drop_match_levels(tag: &str, job: &BountyJobApi) -> (i32, i32) {
+    let (min, max) = (job.min_enemy_level, job.max_enemy_level);
+    if tag == "HexSyndicate" {
+        (min - 10, max - 10)
+    } else {
+        (min, max)
+    }
+}
+
 fn match_tier_items(
+    tag: &str,
     tiers: &[DropBountyTier],
     job: &BountyJobApi,
     rotation: Option<char>,
 ) -> Vec<String> {
+    let (job_lo, job_hi) = drop_match_levels(tag, job);
     let candidates: Vec<&DropBountyTier> = tiers
         .iter()
         .filter(|t| tier_eligible_for_job(t, job))
         .collect();
     if let Some(t) = candidates
         .iter()
-        .find(|t| levels_match(&t.bounty_level, job))
+        .find(|t| levels_match(&t.bounty_level, job_lo, job_hi))
     {
         return unique_items(t, rotation);
     }
@@ -207,7 +219,7 @@ fn match_tier_items(
         let Some((lo, hi)) = parse_level_range(&t.bounty_level) else {
             continue;
         };
-        let dist = (lo - job.min_enemy_level).abs() + (hi - job.max_enemy_level).abs();
+        let dist = (lo - job_lo).abs() + (hi - job_hi).abs();
         if dist < best_dist {
             best_dist = dist;
             best = Some(t);
@@ -230,11 +242,11 @@ fn tier_eligible_for_job(tier: &DropBountyTier, job: &BountyJobApi) -> bool {
     jt.contains("vault") || jt.contains("isolation") || jt.contains("arcana")
 }
 
-fn levels_match(bounty_level: &str, job: &BountyJobApi) -> bool {
+fn levels_match(bounty_level: &str, job_lo: i32, job_hi: i32) -> bool {
     let Some((lo, hi)) = parse_level_range(bounty_level) else {
         return false;
     };
-    lo == job.min_enemy_level && hi == job.max_enemy_level
+    lo == job_lo && hi == job_hi
 }
 
 fn parse_level_range(s: &str) -> Option<(i32, i32)> {
@@ -512,6 +524,50 @@ mod tests {
         m
     }
 
+    fn sample_job(min: i32, max: i32) -> BountyJobApi {
+        BountyJobApi {
+            job_type: "test".into(),
+            kind: String::new(),
+            kind_zh: String::new(),
+            title: String::new(),
+            min_enemy_level: min,
+            max_enemy_level: max,
+            standing_total: 0,
+            is_advanced: false,
+            is_steel_path: false,
+            challenge_zh: String::new(),
+            rewards: vec![],
+            reward_table: String::new(),
+        }
+    }
+
+    fn hex_drop_tiers() -> Vec<DropBountyTier> {
+        [
+            ("Level  55 - 60 WF1999 Bounty", "Tier55"),
+            ("Level  65 - 70 WF1999 Bounty", "Tier65"),
+            ("Level  75 - 80 WF1999 Bounty", "Tier75"),
+            ("Level  85 - 90 WF1999 Bounty", "Tier85"),
+            ("Level  95 - 100 WF1999 Bounty", "Tier95"),
+            ("Level  105 - 110 WF1999 Bounty", "Tier105"),
+            ("Level  115 - 120 WF1999 Bounty", "Tier115"),
+        ]
+        .into_iter()
+        .map(|(level, item)| {
+            let mut rewards = HashMap::new();
+            rewards.insert(
+                "B".into(),
+                vec![DropRewardItem {
+                    item_name: item.into(),
+                }],
+            );
+            DropBountyTier {
+                bounty_level: level.into(),
+                rewards,
+            }
+        })
+        .collect()
+    }
+
     #[test]
     fn parse_level_range_ok() {
         assert_eq!(
@@ -521,6 +577,33 @@ mod tests {
         assert_eq!(
             parse_level_range("Level 5 - 15 Cetus Bounty"),
             Some((5, 15))
+        );
+    }
+
+    #[test]
+    fn hex_levels_match_drop_all_with_minus_ten() {
+        let tiers = hex_drop_tiers();
+        let cases = [
+            (65, 70, "Tier55"),
+            (75, 80, "Tier65"),
+            (125, 130, "Tier115"),
+        ];
+        for (min, max, expect) in cases {
+            let job = sample_job(min, max);
+            let items = match_tier_items("HexSyndicate", &tiers, &job, Some('B'));
+            assert_eq!(items, vec![expect.to_string()], "Lv {min}-{max}");
+        }
+        // 非 Hex 不偏移：65–70 应对 drop 的 65–70
+        let job = sample_job(65, 70);
+        let items = match_tier_items("EntratiLabSyndicate", &tiers, &job, Some('B'));
+        assert_eq!(items, vec!["Tier65".to_string()]);
+    }
+
+    #[test]
+    fn cycle_rot_path_selects_pool_b() {
+        assert_eq!(
+            parse_reward_rotation("TierATableBRewards"),
+            Some('B')
         );
     }
 

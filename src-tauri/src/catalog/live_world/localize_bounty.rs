@@ -233,8 +233,9 @@ pub fn is_cycle_filled_syndicate(tag: &str) -> bool {
 /// 档位：(min, max, standing)。按 cycle 数组下标取。
 pub fn cycle_tier_stats(tag: &str, index: usize) -> Option<(i32, i32, i32)> {
     let table: &[(i32, i32, i32)] = match tag {
+        // 游戏内等级；官方 drop-all hexRewards 标签偏低约 10，匹配时见 bounty_rewards。
         "HexSyndicate" => &[
-            (65, 75, 1000),
+            (65, 70, 1000),
             (75, 80, 2000),
             (85, 90, 3000),
             (95, 100, 4000),
@@ -601,6 +602,10 @@ mod tests {
                 None,
             ),
             "摧毁高危物品"
+        );
+        assert_eq!(
+            cycle_tier_stats("HexSyndicate", 0).unwrap(),
+            (65, 70, 1000)
         );
         let (min, max, standing) = cycle_tier_stats("HexSyndicate", 6).unwrap();
         assert_eq!((min, max, standing), (125, 130, 7500));

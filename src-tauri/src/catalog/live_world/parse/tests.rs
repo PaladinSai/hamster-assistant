@@ -442,6 +442,19 @@ fn cycle_fills_empty_zariman_cavia_hex_boards() {
         hex.jobs.iter().map(|j| j.standing_total).max(),
         Some(7500)
     );
+    // 首档游戏内等级 65–70；cycle rot=B → 伪 reward_table
+    let low = hex
+        .jobs
+        .iter()
+        .find(|j| j.standing_total == 1000)
+        .expect("hex tier0");
+    assert_eq!((low.min_enemy_level, low.max_enemy_level), (65, 70));
+    assert!(
+        hex.jobs
+            .iter()
+            .all(|j| j.reward_table.contains("TableBRewards")),
+        "cycle rot=B should set reward_table"
+    );
     // 档位表最高档标题：最后一档 node 为 SolNode852 → 地狱净化：科腐者
     assert!(hex.jobs.iter().any(|j| j.title.contains("刺杀")));
 
