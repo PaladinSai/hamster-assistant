@@ -57,5 +57,6 @@ jobs:
             已安装用户可在应用内检查更新（需本机网络可访问 GitHub Releases）。
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: true
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
           args: --bundles nsis
