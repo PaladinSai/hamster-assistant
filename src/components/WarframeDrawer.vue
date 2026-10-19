@@ -183,7 +183,7 @@ function openRelicInApp(relicKey: string) {
               <col class="col-part" />
               <col class="col-status" />
               <col v-if="isPrime" class="col-relic" />
-              <col />
+              <col class="col-note" />
             </colgroup>
             <thead>
               <tr>
@@ -233,6 +233,7 @@ function openRelicInApp(relicKey: string) {
                       :drops="p.drops"
                       :expanded="isExpanded(p.partId)"
                       @toggle="toggleExpand"
+                      @open-relic="openRelicInApp"
                     />
                   </td>
                   <td>

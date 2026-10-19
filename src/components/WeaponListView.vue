@@ -341,27 +341,32 @@ function typePillClass(f: WeaponFamilyListItem, m: WeaponMemberDto) {
   return variantClass(m.variant);
 }
 
-function onRowClick(row: WeaponRow) {
+/** 与战甲一致：点行开抽屉；控件用 data-toggle 排除。多部件（>1）才开。 */
+function onRowClick(row: WeaponRow, e: MouseEvent) {
   if (!canOpenDrawer(row.member)) return;
+  const t = e.target as HTMLElement;
+  if (t.closest("[data-toggle]")) return;
   emit("selectWeapon", row.family.familyId, row.member.weaponId);
 }
 
-function onToggleWish(m: WeaponMemberDto, e: Event) {
+function onToggleWish(m: WeaponMemberDto, e: MouseEvent) {
   e.stopPropagation();
   emit("toggleWish", m.weaponId, m.wish ? 0 : 1);
 }
 
-function onToggleMastered(m: WeaponMemberDto, e: Event) {
+function onToggleMastered(m: WeaponMemberDto, e: MouseEvent) {
   e.stopPropagation();
   emit("toggleMastered", m.weaponId, m.mastered ? 0 : 1);
 }
 
 function onStatusChange(m: WeaponMemberDto, e: Event) {
+  e.stopPropagation();
   const status = Number((e.target as HTMLSelectElement).value);
   emit("updateWeaponStatus", m.weaponId, status);
 }
 
 function onIncarnonChange(m: WeaponMemberDto, e: Event) {
+  e.stopPropagation();
   const incarnon = Number((e.target as HTMLSelectElement).value);
   emit("updateWeaponIncarnon", m.weaponId, incarnon);
 }
@@ -472,12 +477,13 @@ function onNoteBlur(m: WeaponMemberDto) {
               row.member.weaponId === selectedWeaponId,
             clickable: canOpenDrawer(row.member),
           }"
-          @click="onRowClick(row)"
+          @click="onRowClick(row, $event)"
         >
-          <td @click.stop>
+          <td>
             <span
               class="check wish"
               :class="{ on: !!row.member.wish }"
+              data-toggle="wish"
               :title="row.member.wish ? '取消心愿' : '加入心愿'"
               @click="onToggleWish(row.member, $event)"
               >★</span
@@ -509,10 +515,12 @@ function onNoteBlur(m: WeaponMemberDto) {
               >{{ typePill(row.family, row.member) }}</span
             >
           </td>
-          <td @click.stop>
+          <td>
             <select
               class="list-status"
+              data-toggle="status"
               :value="row.member.status"
+              @click.stop
               @change="onStatusChange(row.member, $event)"
             >
               <option
@@ -524,10 +532,11 @@ function onNoteBlur(m: WeaponMemberDto) {
               </option>
             </select>
           </td>
-          <td @click.stop>
+          <td>
             <span
               class="check"
               :class="{ on: !!row.member.mastered }"
+              data-toggle="mastered"
               :title="row.member.mastered ? '取消已掌握' : '标为已掌握'"
               @click="onToggleMastered(row.member, $event)"
               >✓</span
@@ -540,11 +549,13 @@ function onNoteBlur(m: WeaponMemberDto) {
               "
             />
           </td>
-          <td v-if="!isModularView" @click.stop>
+          <td v-if="!isModularView">
             <select
               v-if="row.member.canIncarnon === 1"
               class="list-status"
+              data-toggle="incarnon"
               :value="row.member.incarnon"
+              @click.stop
               @change="onIncarnonChange(row.member, $event)"
             >
               <option
@@ -557,12 +568,14 @@ function onNoteBlur(m: WeaponMemberDto) {
             </select>
             <span v-else style="color: var(--text-mute)">—</span>
           </td>
-          <td @click.stop>
+          <td>
             <input
               class="list-note"
               type="text"
+              data-toggle="note"
               :value="noteDrafts[row.member.weaponId] ?? ''"
               placeholder="备注"
+              @click.stop
               @input="
                 noteDrafts[row.member.weaponId] = (
                   $event.target as HTMLInputElement

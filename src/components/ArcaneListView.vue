@@ -440,7 +440,6 @@ function copiesLabel(a: ArcaneListItem) {
             <select
               class="list-status"
               :value="a.rank"
-              :disabled="a.status === 0"
               @change="onRankChange(a, $event)"
             >
               <option

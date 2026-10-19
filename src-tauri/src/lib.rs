@@ -276,6 +276,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_process::init())
         // 不恢复 VISIBLE：配置里 visible=false 防闪白；显隐由首屏就绪后前端/这里负责
         .plugin(
             WindowStateBuilder::default()
@@ -283,6 +284,10 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
+
             if let Ok(resource_dir) = app.path().resource_dir() {
                 db::set_bundled_resource_dir(resource_dir);
             }

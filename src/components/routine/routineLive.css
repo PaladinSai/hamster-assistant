@@ -201,6 +201,9 @@
   border-style: dashed;
 }
 .live-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 6px 12px;
   border-radius: 8px;
   font-size: 14px;
@@ -208,6 +211,43 @@
   color: var(--text);
   background: rgba(11, 15, 20, 0.45);
   border: 1px solid var(--line-soft);
+}
+.live-chip-name {
+  min-width: 0;
+}
+.live-chip-status {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  border: 1px solid transparent;
+}
+.live-chip-status.inline {
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.live-chip-status.ok {
+  color: var(--ok, #6bcf8e);
+  background: color-mix(in srgb, var(--ok, #6bcf8e) 14%, transparent);
+  border-color: color-mix(in srgb, var(--ok, #6bcf8e) 28%, transparent);
+}
+.live-chip-status.warn {
+  color: var(--warn, #d4a35a);
+  background: color-mix(in srgb, var(--warn, #d4a35a) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warn, #d4a35a) 28%, transparent);
+}
+.live-chip-status.bad {
+  color: var(--bad, #e06c75);
+  background: color-mix(in srgb, var(--bad, #e06c75) 14%, transparent);
+  border-color: color-mix(in srgb, var(--bad, #e06c75) 28%, transparent);
+}
+.live-chip-status.mute,
+.live-chip-status.info {
+  color: var(--text-mute);
+  background: rgba(100, 116, 133, 0.12);
+  border-color: rgba(100, 116, 133, 0.22);
 }
 .live-rot-toggle {
   align-self: flex-start;

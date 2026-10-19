@@ -52,12 +52,16 @@ defineEmits<{
     <RoutinePanel
       v-if="section === 'overview' || section === 'daily'"
       mode="daily"
+      :families="families"
+      :weapon-families="weaponFamilies"
       :refresh-token="refreshToken"
       :active="active !== false"
     />
     <RoutinePanel
       v-if="section === 'overview' || section === 'weekly'"
       mode="weekly"
+      :families="families"
+      :weapon-families="weaponFamilies"
       :refresh-token="refreshToken"
       :active="active !== false"
     />

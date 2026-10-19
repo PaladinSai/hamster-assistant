@@ -19,6 +19,7 @@ import {
   type StandingRanksPrefs,
 } from "../lib/api";
 import { useBackendReload } from "../composables/useBackendReload";
+import { useAppUpdater } from "../composables/useAppUpdater";
 import ArcaneListView from "./ArcaneListView.vue";
 import HomeView from "./HomeView.vue";
 import ModListView from "./ModListView.vue";
@@ -323,10 +324,20 @@ watch(liveRefreshToken, () => {
   void loadStandingSidebar();
 });
 
+const {
+  checking: updateChecking,
+  installing: updateInstalling,
+  checkAppUpdate,
+  scheduleIdleUpdateCheck,
+  ensureCurrentVersion,
+} = useAppUpdater();
+
 onMounted(() => {
   document.addEventListener("keydown", onKeydown);
   // 后台预热本地列表；时效网络由 Rust 线程拉，事件订阅在 useBackendReload
   preloadAll();
+  void ensureCurrentVersion();
+  scheduleIdleUpdateCheck();
   ensureLoaded("home");
   // 侧栏声望勾选状态延后，避免和首屏读库挤在一起
   window.setTimeout(() => {
@@ -603,6 +614,21 @@ onUnmounted(() => {
         <div class="spacer" />
         <span v-if="updating" class="chip">更新中…</span>
         <span v-else-if="updateMsg" class="chip" :title="updateMsg">已更新</span>
+        <button
+          class="ghost"
+          type="button"
+          title="从 GitHub Releases 检查应用版本"
+          :disabled="updateChecking || updateInstalling"
+          @click="checkAppUpdate(true)"
+        >
+          {{
+            updateInstalling
+              ? "安装更新…"
+              : updateChecking
+                ? "检查中…"
+                : "检查更新"
+          }}
+        </button>
         <button
           v-if="view === 'home' || view === 'feed' || view === 'standing'"
           class="ghost"

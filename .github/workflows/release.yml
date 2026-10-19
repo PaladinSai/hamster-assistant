@@ -43,6 +43,8 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: '仓鼠小助手 v__VERSION__'
@@ -51,6 +53,9 @@ jobs:
 
             安装后开始菜单、桌面快捷方式与「应用和功能」显示为「仓鼠小助手」。
             Windows 数据目录：`%APPDATA%\hamster-assistant\`
+
+            已安装用户可在应用内检查更新（需本机网络可访问 GitHub Releases）。
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: true
           args: --bundles nsis

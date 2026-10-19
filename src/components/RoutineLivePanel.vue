@@ -3,6 +3,7 @@
  * 日常/周常条目的时效详情壳：按 kind 分发到 routine/* 子面板。
  * 裂隙 / 平原 / 动态页电波另见 FissurePanel、PlainsPanel、NightwavePanel。
  */
+import type { WarframeListItem, WeaponFamilyListItem } from "../lib/api";
 import type { LiveDetail } from "./routine/liveTypes";
 import ArchimedeaLiveDetail from "./routine/ArchimedeaLiveDetail.vue";
 import ArchonLiveDetail from "./routine/ArchonLiveDetail.vue";
@@ -12,9 +13,14 @@ import NightwaveLiveDetail from "./routine/NightwaveLiveDetail.vue";
 import SortieLiveDetail from "./routine/SortieLiveDetail.vue";
 import SteelLiveDetail from "./routine/SteelLiveDetail.vue";
 
-defineProps<{
-  detail: LiveDetail;
-}>();
+withDefaults(
+  defineProps<{
+    detail: LiveDetail;
+    families?: WarframeListItem[];
+    weaponFamilies?: WeaponFamilyListItem[];
+  }>(),
+  { families: () => [], weaponFamilies: () => [] },
+);
 
 const emit = defineEmits<{ ended: [] }>();
 </script>
@@ -49,6 +55,8 @@ const emit = defineEmits<{ ended: [] }>();
     <CircuitLiveDetail
       v-else-if="detail.kind === 'circuit'"
       :detail="detail"
+      :families="families"
+      :weapon-families="weaponFamilies"
       @ended="emit('ended')"
     />
     <HexLiveDetail

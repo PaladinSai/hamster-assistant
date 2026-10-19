@@ -157,7 +157,7 @@ function onKindClick(key: WeaponKindFilter) {
     </div>
     <span style="color: var(--text-mute); font-size: 12px">
       {{ slotLabel }} · {{ rowCount }} {{ countUnit
-      }}{{ isModularSlot ? " · 枪膛 / 击打部 / 棱镜" : " · 多部件可点开抽屉" }}
+      }}{{ isModularSlot ? " · 枪膛 / 击打部 / 棱镜" : " · 多部件点行打开抽屉" }}
     </span>
   </div>
 

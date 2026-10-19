@@ -1,5 +1,11 @@
 import { readonly, ref } from "vue";
 
+export interface AppToastAction {
+  label: string;
+  kind?: "primary" | "ghost";
+  run: () => void;
+}
+
 export interface AppToast {
   id: string;
   title: string;
@@ -7,6 +13,7 @@ export interface AppToast {
   expiry: string | null;
   /** 势力 tag；有则点击可跳转对应声望页 */
   standingTag: string | null;
+  actions?: AppToastAction[];
 }
 
 export interface BountyAlertPayload {
@@ -51,6 +58,7 @@ export function pushToast(input: {
   body: string;
   expiry?: string | null;
   standingTag?: string | null;
+  actions?: AppToastAction[];
 }) {
   const id = `toast-${Date.now()}-${++seq}`;
   const toast: AppToast = {
@@ -59,6 +67,7 @@ export function pushToast(input: {
     body: input.body,
     expiry: input.expiry ?? null,
     standingTag: input.standingTag?.trim() || null,
+    actions: input.actions,
   };
   toasts.value = [...toasts.value, toast];
   scheduleExpiry(toast);

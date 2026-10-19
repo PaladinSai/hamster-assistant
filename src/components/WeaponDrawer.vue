@@ -247,13 +247,21 @@ function variantClass(variant: number) {
 
           <template v-else-if="isPrime">
             <table class="part-table">
+              <colgroup>
+                <col class="col-part" />
+                <col class="col-qty" />
+                <col class="col-have" />
+                <col class="col-status" />
+                <col class="col-relic" />
+                <col class="col-note" />
+              </colgroup>
               <thead>
                 <tr>
                   <th>部件</th>
-                  <th style="width: 64px">数量</th>
-                  <th style="width: 80px">已获取</th>
-                  <th style="width: 100px">状态</th>
-                  <th style="min-width: 120px">遗物</th>
+                  <th>数量</th>
+                  <th>已获取</th>
+                  <th>状态</th>
+                  <th>遗物</th>
                   <th>备注</th>
                 </tr>
               </thead>
@@ -305,6 +313,7 @@ function variantClass(variant: number) {
                         :drops="p.drops"
                         :expanded="isExpanded(p.partId)"
                         @toggle="toggleExpand"
+                        @open-relic="openRelicInApp"
                       />
                     </td>
                     <td>

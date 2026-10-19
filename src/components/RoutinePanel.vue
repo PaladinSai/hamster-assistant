@@ -15,6 +15,8 @@ import {
   updateRoutine,
   type RoutineItemDto,
   type RoutineKind,
+  type WarframeListItem,
+  type WeaponFamilyListItem,
 } from "../lib/api";
 import { useExpandedSet } from "../composables/useExpandedSet";
 import { useLiveDailyCache } from "../composables/useLiveCache";
@@ -25,12 +27,17 @@ import RoutineLivePanel from "./RoutineLivePanel.vue";
 
 export type RoutinePanelMode = "daily" | "weekly";
 
-const props = defineProps<{
-  mode: RoutinePanelMode;
-  refreshToken?: number;
-  /** 当前是否在首页（倒计时用）。 */
-  active?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    mode: RoutinePanelMode;
+    families?: WarframeListItem[];
+    weaponFamilies?: WeaponFamilyListItem[];
+    refreshToken?: number;
+    /** 当前是否在首页（倒计时用）。 */
+    active?: boolean;
+  }>(),
+  { families: () => [], weaponFamilies: () => [] },
+);
 
 const { items, ensureLoaded: ensureRoutines } = useRoutinesList();
 const { isExpanded, toggleExpand } = useExpandedSet();
@@ -451,6 +458,8 @@ const addKind = computed<RoutineKind | null>(() => {
               <RoutineLivePanel
                 v-if="liveDetail(t.title) && isExpanded(t.id)"
                 :detail="liveDetail(t.title)!"
+                :families="families"
+                :weapon-families="weaponFamilies"
                 @ended="onLiveEnded"
                 @click.stop
               />

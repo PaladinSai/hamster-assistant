@@ -28,6 +28,21 @@ npm run tauri -- build --bundles nsis   # Windows 安装包
 
 安装包 / 安装目录名为英文 `Hamster Assistant`（避免 CI 丢中文文件名）；开始菜单、桌面快捷方式与「应用和功能」通过自定义 NSIS 模板显示「仓鼠小助手」，窗口标题仍为中文。
 
+## 自动更新（维护者）
+
+应用通过 GitHub Releases 的 `latest.json` 检查更新（`tauri-plugin-updater`）。
+
+1. 本地密钥在 `.tauri/`（已 gitignore）。公钥已写入 `src-tauri/tauri.conf.json`。
+2. **首次发带更新能力的包前**，把私钥写入仓库 Secrets（勿提交到 git）：
+
+```powershell
+Get-Content -Raw .tauri\hamster.key | gh secret set TAURI_SIGNING_PRIVATE_KEY
+```
+
+若生成密钥时设了密码，再设 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
+3. 打 `v*` tag 走现有 Release workflow；会上传安装包、签名产物与 `latest.json`。
+4. 用户侧：顶栏「检查更新」，或启动后空闲自动检查；确认后下载安装并重启。
+
 ## 数据库
 
 启动时若 AppData 无库，从安装包种子拷贝 `catalog.sqlite` / `user.sqlite`；版本低则升级。

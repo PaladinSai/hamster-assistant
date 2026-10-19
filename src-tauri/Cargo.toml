@@ -1,6 +1,6 @@
 [package]
 name = "tauri-app"
-version = "1.0.4"
+version = "1.0.5"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -28,6 +28,7 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 tauri-plugin-notification = "2"
 tauri-plugin-window-state = "2"
+tauri-plugin-process = "2"
 chrono-tz = "0.10"
 
 [[bin]]
@@ -42,3 +43,6 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-updater = "2"

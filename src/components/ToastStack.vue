@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { STANDING_SECTION_TAG, type StandingSection } from "../composables/useAppNav";
-import { useAppToasts, type AppToast } from "../composables/useAppToasts";
+import { useAppToasts } from "../composables/useAppToasts";
 import LiveRemain from "./routine/LiveRemain.vue";
 
 const emit = defineEmits<{
@@ -17,13 +17,19 @@ const TAG_TO_SECTION = Object.fromEntries(
   ).map(([section, tag]) => [tag, section]),
 ) as Record<string, Exclude<StandingSection, "overview">>;
 
-function onToastClick(t: AppToast) {
+function onToastClick(t: { id: string; standingTag: string | null; actions?: readonly unknown[] }) {
+  if (t.actions?.length) return;
   const tag = t.standingTag;
   if (!tag) return;
   const section = TAG_TO_SECTION[tag];
   if (!section) return;
   emit("openStanding", section);
   dismissToast(t.id);
+}
+
+function onAction(id: string, run: () => void) {
+  dismissToast(id);
+  run();
 }
 </script>
 
@@ -33,7 +39,7 @@ function onToastClick(t: AppToast) {
       v-for="t in toasts"
       :key="t.id"
       class="toast-card"
-      :class="{ clickable: !!t.standingTag }"
+      :class="{ clickable: !!t.standingTag && !t.actions?.length }"
       role="status"
       @click="onToastClick(t)"
     >
@@ -49,6 +55,18 @@ function onToastClick(t: AppToast) {
         </button>
       </div>
       <p class="toast-body">{{ t.body }}</p>
+      <div v-if="t.actions?.length" class="toast-actions">
+        <button
+          v-for="(a, i) in t.actions"
+          :key="i"
+          type="button"
+          class="toast-act"
+          :class="a.kind === 'primary' ? 'primary' : 'ghost'"
+          @click.stop="onAction(t.id, a.run)"
+        >
+          {{ a.label }}
+        </button>
+      </div>
       <div v-if="t.expiry" class="toast-remain">
         <LiveRemain :expiry="t.expiry" @ended="dismissToast(t.id)" />
       </div>
@@ -120,6 +138,36 @@ function onToastClick(t: AppToast) {
   color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
+}
+.toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.toast-act {
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast-act.primary {
+  border: 1px solid color-mix(in srgb, var(--cyan, #5ec8c8) 45%, transparent);
+  background: color-mix(in srgb, var(--cyan, #5ec8c8) 18%, transparent);
+  color: var(--cyan, #5ec8c8);
+}
+.toast-act.primary:hover {
+  background: color-mix(in srgb, var(--cyan, #5ec8c8) 28%, transparent);
+}
+.toast-act.ghost {
+  border: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--text-mute);
+}
+.toast-act.ghost:hover {
+  color: var(--text);
+  border-color: var(--line);
 }
 .toast-remain {
   margin-top: 8px;

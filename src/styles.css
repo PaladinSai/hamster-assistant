@@ -723,7 +723,7 @@ table.list select.list-status:focus {
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(640px, 92vw);
+  width: min(760px, 94vw);
   background: linear-gradient(180deg, #141c26 0%, #10171f 100%);
   border-left: 1px solid var(--line);
   box-shadow: -16px 0 48px rgba(0, 0, 0, 0.45);
@@ -794,20 +794,6 @@ table.list select.list-status:focus {
 }
 .part-link:hover {
   text-decoration: underline;
-}
-.relic-toggle {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-  color: var(--text-dim);
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-.relic-toggle:hover {
-  color: var(--cyan);
 }
 .relic-expand-row td {
   padding-top: 0;
@@ -911,13 +897,22 @@ table.list select.list-status:focus {
   min-width: 96px;
 }
 .part-table col.col-part {
-  width: 28%;
+  width: 20%;
 }
 .part-table col.col-status {
   width: 18%;
 }
+.part-table col.col-qty {
+  width: 52px;
+}
+.part-table col.col-have {
+  width: 64px;
+}
 .part-table col.col-relic {
-  width: 26%;
+  width: 30%;
+}
+.part-table col.col-note {
+  width: auto;
 }
 .part-table col.col-grade {
   width: 48px;
