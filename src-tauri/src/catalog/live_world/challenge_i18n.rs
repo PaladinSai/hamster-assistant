@@ -250,6 +250,18 @@ impl ChallengeLocalizer {
         self.entry(challenge_path).and_then(|e| e.standing)
     }
 
+    /// 路径以前缀开头的挑战（赏金关注清单用）。
+    pub fn paths_with_prefix(&self, prefix: &str) -> Vec<String> {
+        let mut paths: Vec<String> = self
+            .challenges
+            .keys()
+            .filter(|path| path.starts_with(prefix))
+            .cloned()
+            .collect();
+        paths.sort();
+        paths
+    }
+
     /// 电波标题+描述；至少标题命中才返回。
     pub fn nightwave_zh(&self, challenge_path: &str) -> Option<(String, String)> {
         let title = self.challenge_title_zh(challenge_path)?;

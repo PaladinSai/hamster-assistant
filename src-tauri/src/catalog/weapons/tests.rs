@@ -8,6 +8,8 @@ use super::rules::{
     VARIANT_MK1, VARIANT_PRIME, VARIANT_VANDAL,
 };
 use crate::catalog::wfcd::{MODULAR_KIND_AMP, MODULAR_KIND_KITGUN, MODULAR_KIND_ZAW};
+use crate::db;
+use crate::id::Snowflake;
 
     #[test]
     fn family_variant_prefixes() {
@@ -187,4 +189,34 @@ use crate::catalog::wfcd::{MODULAR_KIND_AMP, MODULAR_KIND_KITGUN, MODULAR_KIND_Z
         assert_eq!(can_incarnon("Hema", VARIANT_BASE, &empty), 0);
         // 自带灵化 tag
         assert_eq!(can_incarnon("Felarx", VARIANT_BASE, &native), 1);
+    }
+
+    #[test]
+    fn paired_gauntlets_do_not_share_part_key() {
+        let dir = std::env::temp_dir().join(format!(
+            "cangshu_gauntlet_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        db::init_databases_ex(&dir, false).unwrap();
+        let mut catalog = db::open_catalog(&db::catalog_path(&dir)).unwrap();
+        let snow = Snowflake::new(1);
+        let melee = br#"[{
+          "name":"Furax Wraith",
+          "uniqueName":"/Lotus/Weapons/Tenno/Melee/Fist/FuraxWraith",
+          "components":[
+            {"uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/FuraxWraithLeftGauntlet","itemCount":1},
+            {"uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/FuraxWraithRightGauntlet","itemCount":1}
+          ]
+        }]"#;
+        super::import::import_weapons_json(&mut catalog, b"[]", b"[]", melee, &snow).unwrap();
+        let n: i64 = catalog
+            .query_row("SELECT COUNT(*) FROM weapon_part", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 2);
+        let _ = std::fs::remove_dir_all(&dir);
     }

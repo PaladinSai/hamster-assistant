@@ -5,12 +5,12 @@ mod parse;
 mod import;
 
 pub use fetch::fetch_relics;
-pub use import::{import_relics_json, RelicImportStats};
+pub use import::{
+    import_relics_json, link_suit_relics_from_rewards, relink_weapon_parts_by_unique,
+    RelicImportStats,
+};
 
-pub const DEFAULT_RELICS_URLS: &[&str] = &[
-    "https://cdn.jsdelivr.net/gh/WFCD/warframe-items@master/data/json/Relics.json",
-    "https://raw.githubusercontent.com/WFCD/warframe-items/master/data/json/Relics.json",
-];
+pub const DEFAULT_RELICS_URL: &str = "https://gh-proxy.org/https://raw.githubusercontent.com/WFCD/warframe-items/master/data/json/Relics.json";
 
 #[cfg(test)]
 mod tests {
@@ -102,6 +102,19 @@ mod tests {
         assert_eq!(f, "Braton");
         assert_eq!(p, "blueprint");
         assert!(map_weapon_prime_reward("Burston Prime").is_none());
+    }
+
+    #[test]
+    fn empty_intact_rewards_are_rejected() {
+        let empty = br#"[{"name":"Lith A1 Intact","rewards":[]}]"#;
+        let err = super::fetch::reject_empty_intact_rewards(empty).unwrap_err();
+        assert!(err.contains("没有 Intact 奖励"));
+
+        let with_reward = br#"[{
+          "name":"Lith A1 Intact",
+          "rewards":[{"rarity":"Rare","chance":2,"item":{"name":"Forma Blueprint","uniqueName":"/Lotus/Types/Items/MiscItems/FormaBlueprint"}}]
+        }]"#;
+        super::fetch::reject_empty_intact_rewards(with_reward).unwrap();
     }
 
     #[test]
@@ -249,6 +262,299 @@ mod tests {
             )
             .unwrap();
         assert_eq!(n_weapon, 1);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn strip_weapon_zh_drops_weapon_title() {
+        use super::import::strip_weapon_zh;
+        assert_eq!(
+            strip_weapon_zh("旋刃飞刀 Prime 镖袋", "旋刃飞刀 Prime").as_deref(),
+            Some("镖袋")
+        );
+        assert_eq!(
+            strip_weapon_zh("诸葛连弩 Prime 弓身", "诸葛连弩Prime").as_deref(),
+            Some("弓身")
+        );
+        assert_eq!(
+            strip_weapon_zh("凯旋之爪 Prime 爪刃", "凯旋之爪").as_deref(),
+            Some("爪刃")
+        );
+    }
+
+    #[test]
+    fn weapon_parts_align_by_unique_name() {
+        let dir = temp_dir("uid");
+        db::init_databases_ex(&dir, false).unwrap();
+        let mut catalog = db::open_catalog(&db::catalog_path(&dir)).unwrap();
+        let snow = Snowflake::new(1);
+        catalog
+            .execute_batch(
+                "INSERT INTO name_i18n (name_en, name_zh_userdict) VALUES
+                 ('Spira Prime', '旋刃飞刀Prime'),
+                 ('Zhuge Prime', '诸葛连弩Prime'),
+                 ('Venka Prime', '凯旋之爪Prime'),
+                 ('Pouch', '镖袋'),
+                 ('Grip', '弓身'),
+                 ('Blades', '爪刃')
+                 ON CONFLICT(name_en) DO UPDATE SET
+                   name_zh_userdict = excluded.name_zh_userdict,
+                   name_zh_wfcd = NULL;",
+            )
+            .unwrap();
+
+        let primary = b"[]";
+        let secondary = br#"[
+          {"name":"Spira Prime","uniqueName":"/Lotus/Weapons/Tenno/ThrowingWeapons/PrimeLiDagger/PrimeLiDagger","components":[
+            {"itemCount":2,"uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/PrimeLiDaggerBlade"},
+            {"itemCount":1,"uniqueName":"/Lotus/Types/Recipes/Weapons/PrimeLiDaggerBlueprint"},
+            {"itemCount":2,"uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/PrimeLiDaggerHolster"},
+            {"itemCount":8,"uniqueName":"/Lotus/Types/Items/MiscItems/OrokinCell"}
+          ]},
+          {"name":"Akbronco Prime","uniqueName":"/Lotus/Weapons/Tenno/Pistol/AkbroncoPrime","components":[
+            {"itemCount":1,"uniqueName":"/Lotus/Types/Recipes/Weapons/AkbroncoPrimeBlueprint"},
+            {"itemCount":2,"uniqueName":"/Lotus/Weapons/Tenno/Pistol/BroncoPrime"},
+            {"itemCount":1,"uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/AkbroncoPrimeLink"}
+          ]}
+        ]"#;
+        let melee = br#"[
+          {"name":"Zhuge Prime","uniqueName":"/Lotus/Weapons/Tenno/Bows/PrimeZhuge/PrimeZhugeWeapon","components":[
+            {"itemCount":1,"uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/ZhugePrimeStock"},
+            {"itemCount":1,"uniqueName":"/Lotus/Types/Recipes/Weapons/ZhugePrimeBlueprint"}
+          ]},
+          {"name":"Venka Prime","uniqueName":"/Lotus/Weapons/Tenno/Melee/PrimeVenkaClaws/PrimeVenkaClaws","components":[
+            {"itemCount":2,"uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/PrimeVenkaClawsBlade"}
+          ]}
+        ]"#;
+        crate::catalog::import_weapons_json(&mut catalog, primary, secondary, melee, &snow).unwrap();
+
+        let blade_id: i64 = catalog
+            .query_row(
+                "SELECT p.id FROM weapon_part p
+                 JOIN weapon w ON w.id = p.weapon_id
+                 WHERE w.name_en = 'Spira Prime' AND p.part_key = 'blade'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        catalog
+            .execute(
+                "UPDATE weapon_part SET unique_name = NULL WHERE id = ?1",
+                [blade_id],
+            )
+            .unwrap();
+        crate::catalog::import_weapons_json(&mut catalog, primary, secondary, melee, &snow).unwrap();
+        let blade_again: (i64, String) = catalog
+            .query_row(
+                "SELECT p.id, p.unique_name FROM weapon_part p
+                 JOIN weapon w ON w.id = p.weapon_id
+                 WHERE w.name_en = 'Spira Prime' AND p.unique_name LIKE '%PrimeLiDaggerBlade'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(blade_again.0, blade_id);
+
+        let relics = br#"[{
+          "name":"Lith Z1 Intact",
+          "uniqueName":"/Lotus/Types/Game/Projections/T1VoidProjectionLithZ1",
+          "rewards":[
+            {"rarity":"Uncommon","chance":11,"item":{"name":"Spira Prime Pouch","uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/PrimeLiDaggerHolster"}},
+            {"rarity":"Common","chance":25.33,"item":{"name":"Zhuge Prime Grip","uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/ZhugePrimeStock"}},
+            {"rarity":"Rare","chance":2,"item":{"name":"Venka Prime Blades","uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/PrimeVenkaClawsBlade"}}
+          ]
+        }]"#;
+        import_relics_json(&mut catalog, relics, &snow).unwrap();
+
+        let pouch: (String, String, i32, i64) = catalog
+            .query_row(
+                "SELECT p.part_key, p.name_zh, p.need_qty,
+                        (SELECT COUNT(*) FROM weapon_part_relic r WHERE r.part_id = p.id)
+                 FROM weapon_part p
+                 JOIN weapon w ON w.id = p.weapon_id
+                 WHERE p.unique_name LIKE '%PrimeLiDaggerHolster'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(pouch.0, "pouch");
+        assert_eq!(pouch.1, "镖袋");
+        assert_eq!(pouch.2, 2);
+        assert_eq!(pouch.3, 1);
+
+        let grip: (String, String, i64) = catalog
+            .query_row(
+                "SELECT p.part_key, p.name_zh,
+                        (SELECT COUNT(*) FROM weapon_part_relic r WHERE r.part_id = p.id)
+                 FROM weapon_part p
+                 WHERE p.unique_name LIKE '%ZhugePrimeStock'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(grip.0, "grip");
+        assert_eq!(grip.1, "弓身");
+        assert_eq!(grip.2, 1);
+
+        let blades: (String, String, i64) = catalog
+            .query_row(
+                "SELECT p.part_key, p.name_zh,
+                        (SELECT COUNT(*) FROM weapon_part_relic r WHERE r.part_id = p.id)
+                 FROM weapon_part p
+                 WHERE p.unique_name LIKE '%PrimeVenkaClawsBlade'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(blades.0, "blades");
+        assert_eq!(blades.1, "爪刃");
+        assert_eq!(blades.2, 1);
+
+        let body: i64 = catalog
+            .query_row(
+                "SELECT COUNT(*) FROM weapon_part
+                 WHERE unique_name = '/Lotus/Weapons/Tenno/Pistol/BroncoPrime'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(body, 0);
+        let ak_parts: i64 = catalog
+            .query_row(
+                "SELECT COUNT(*) FROM weapon_part p
+                 JOIN weapon w ON w.id = p.weapon_id
+                 WHERE w.name_en = 'Akbronco Prime'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(ak_parts, 2);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn suit_parts_link_archwing_and_companion_relics() {
+        let dir = temp_dir("suit");
+        db::init_databases_ex(&dir, false).unwrap();
+        let mut catalog = db::open_catalog(&db::catalog_path(&dir)).unwrap();
+        let snow = Snowflake::new(1);
+        catalog
+            .execute_batch(
+                "INSERT INTO name_i18n (name_en, name_zh_userdict) VALUES
+                 ('Odonata Prime', '陨蜓Prime'),
+                 ('Carrier Prime', '搬运者Prime'),
+                 ('Harness Blueprint', '外甲蓝图'),
+                 ('Wings Blueprint', '机翼蓝图'),
+                 ('Carapace', '外壳'),
+                 ('Cerebrum', '头部')
+                 ON CONFLICT(name_en) DO UPDATE SET
+                   name_zh_userdict = excluded.name_zh_userdict,
+                   name_zh_wfcd = NULL;",
+            )
+            .unwrap();
+
+        let arch = br#"[{
+          "name":"Odonata Prime",
+          "uniqueName":"/Lotus/Powersuits/Archwing/PrimeJetPack/PrimeJetPack",
+          "category":"Archwing",
+          "type":"Archwing",
+          "components":[
+            {"uniqueName":"/Lotus/Types/Recipes/ArchwingRecipes/PrimeArchwing/PrimeArchwingBlueprint"},
+            {"uniqueName":"/Lotus/Types/Recipes/ArchwingRecipes/PrimeArchwing/PrimeArchwingChassisComponent"},
+            {"uniqueName":"/Lotus/Types/Recipes/ArchwingRecipes/PrimeArchwing/PrimeArchwingWingsComponent"}
+          ]
+        }]"#;
+        let sentinels = br#"[{
+          "name":"Carrier Prime",
+          "uniqueName":"/Lotus/Types/Sentinels/SentinelPowersuits/PrimeCarrierPowerSuit",
+          "category":"Sentinels",
+          "type":"Sentinel",
+          "components":[
+            {"uniqueName":"/Lotus/Types/Recipes/SentinelRecipes/PrimeCarrierSentinelBlueprint"},
+            {"uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/PrimeCarrierCarapace"},
+            {"uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/PrimeCarrierCerebrum"}
+          ]
+        }]"#;
+        let mechs = br#"[{
+          "name":"Bonewidow",
+          "uniqueName":"/Lotus/Powersuits/EntratiMech/ThanoTech",
+          "category":"Warframes",
+          "type":"Necramech",
+          "components":[
+            {"uniqueName":"/Lotus/Types/Gameplay/InfestedMicroplanet/Resources/Mechs/ThanomechPartEngineItem"},
+            {"uniqueName":"/Lotus/Types/Gameplay/InfestedMicroplanet/Resources/Mechs/ThanomechPartWeaponPodItem"}
+          ]
+        }]"#;
+        crate::catalog::import_archwing_json(&mut catalog, arch, &snow).unwrap();
+        crate::catalog::import_sentinels_json(&mut catalog, sentinels, &snow).unwrap();
+        crate::catalog::import_warframes_json(&mut catalog, mechs, &snow).unwrap();
+
+        let relics = br#"[{
+          "name":"Lith Z2 Intact",
+          "uniqueName":"/Lotus/Types/Game/Projections/T1VoidProjectionLithZ2",
+          "rewards":[
+            {"rarity":"Rare","chance":2,"item":{"name":"Odonata Prime Harness Blueprint","uniqueName":"/Lotus/Types/Recipes/ArchwingRecipes/PrimeArchwing/PrimeArchwingChassisBlueprint"}},
+            {"rarity":"Uncommon","chance":11,"item":{"name":"Odonata Prime Wings Blueprint","uniqueName":"/Lotus/Types/Recipes/ArchwingRecipes/PrimeArchwing/PrimeArchwingWingsBlueprint"}},
+            {"rarity":"Common","chance":25,"item":{"name":"Carrier Prime Carapace","uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/PrimeCarrierCarapace"}},
+            {"rarity":"Uncommon","chance":11,"item":{"name":"Carrier Prime Cerebrum","uniqueName":"/Lotus/Types/Recipes/Weapons/WeaponParts/PrimeCarrierCerebrum"}}
+          ]
+        }]"#;
+        import_relics_json(&mut catalog, relics, &snow).unwrap();
+
+        let harness: (String, i64) = catalog
+            .query_row(
+                "SELECT p.name_zh, (SELECT COUNT(*) FROM warframe_part_relic r WHERE r.part_id=p.id)
+                 FROM warframe_part p
+                 WHERE p.unique_name LIKE '%PrimeArchwingChassisComponent'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(harness.0, "外甲蓝图");
+        assert_eq!(harness.1, 1);
+
+        let wings: (String, i64) = catalog
+            .query_row(
+                "SELECT p.name_zh, (SELECT COUNT(*) FROM warframe_part_relic r WHERE r.part_id=p.id)
+                 FROM warframe_part p
+                 WHERE p.unique_name LIKE '%PrimeArchwingWingsComponent'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(wings.0, "机翼蓝图");
+        assert_eq!(wings.1, 1);
+
+        let cerebrum: (String, i64) = catalog
+            .query_row(
+                "SELECT p.name_zh, (SELECT COUNT(*) FROM warframe_part_relic r WHERE r.part_id=p.id)
+                 FROM warframe_part p
+                 WHERE p.unique_name LIKE '%PrimeCarrierCerebrum'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(cerebrum.0, "头部");
+        assert_eq!(cerebrum.1, 1);
+
+        let engine: String = catalog
+            .query_row(
+                "SELECT name_zh FROM warframe_part WHERE unique_name LIKE '%PartEngineItem'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(engine, "引擎");
+        let pod: String = catalog
+            .query_row(
+                "SELECT name_zh FROM warframe_part WHERE unique_name LIKE '%PartWeaponPodItem'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(pod, "武器舱");
 
         let _ = fs::remove_dir_all(&dir);
     }

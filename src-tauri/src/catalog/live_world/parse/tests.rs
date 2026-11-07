@@ -516,3 +516,30 @@ fn cycle_invalid_json_degrades() {
         .expect("hex");
     assert!(hex.jobs.is_empty());
 }
+
+#[test]
+fn nightcap_and_spider_boards_are_filled_without_worldstate_jobs() {
+    let f = parse_worldstate(b"{}").unwrap();
+    let night = f
+        .bounties
+        .boards
+        .iter()
+        .find(|b| b.tag == "NightcapSyndicate")
+        .expect("nightcap");
+    assert_eq!(night.name, "夜帽");
+    assert!(night.jobs.iter().any(|j| j.title == "解放小动物"));
+    let steel = night.jobs.iter().find(|j| j.is_steel_path).expect("steel");
+    assert!(steel.challenge_zh.contains("2.5"));
+    let spider = f
+        .bounties
+        .boards
+        .iter()
+        .find(|b| b.tag == "ProfitTakerSyndicate")
+        .expect("spider");
+    assert_eq!(spider.name, "大蜘蛛");
+    assert_eq!(spider.jobs.len(), 4);
+    assert_eq!(spider.jobs[0].title, "阶段 1");
+    assert!(spider.jobs.iter().any(|j| {
+        j.rewards.iter().any(|r| r.contains("遗物（光辉）"))
+    }));
+}

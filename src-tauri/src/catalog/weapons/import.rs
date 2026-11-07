@@ -1,6 +1,6 @@
 //! 武器 catalog 入库事务。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
@@ -14,8 +14,8 @@ use crate::id::Snowflake;
 
 use super::parse::{modular_zh_fallback, parse_modular_parts, parse_weapons, ModularPart};
 use super::rules::{
-    can_incarnon, is_material_component, is_space_product_category, skip_craft_parts,
-    weapon_family_and_variant, weapon_part_meta, WeaponImportStats, WfcdWeapon,
+    can_incarnon, is_recipe_craft_part, is_space_product_category, provisional_part_label,
+    skip_craft_parts, weapon_family_and_variant, weapon_part_meta, WeaponImportStats, WfcdWeapon,
     SLOT_MELEE, SLOT_MODULAR, SLOT_PRIMARY, SLOT_SECONDARY, VARIANT_BASE, VARIANT_PRIME,
 };
 
@@ -209,7 +209,7 @@ fn import_in_tx(
 
     let mut family_ids: HashMap<String, i64> = load_family_map(tx)?;
     let mut weapon_ids: HashMap<String, i64> = load_weapon_map(tx)?;
-    let mut part_ids: HashMap<String, i64> = load_part_map(tx)?;
+    let mut parts = load_part_index(tx)?;
     // (family_id, variant) → weapon id，用于冲突时跳过重复名
     let mut variant_owner: HashMap<(i64, i32), i64> = load_variant_owner(tx)?;
 
@@ -295,33 +295,52 @@ fn import_in_tx(
         }
 
         for comp in &w.components {
-            if is_material_component(comp) {
+            if !is_recipe_craft_part(comp) {
                 continue;
             }
-            let Some(meta) = weapon_part_meta(&comp.name) else {
+            let comp_unique = comp.unique_name.as_deref().unwrap_or("").trim();
+            if comp_unique.is_empty() {
                 continue;
-            };
+            }
             let need_qty = comp.item_count.unwrap_or(1).max(1);
-            let part_map_key = format!("{}#{}", w.unique_name, meta.key);
+            let (preferred_key, sort, name_zh) = provisional_part_label(&comp.name, comp_unique);
 
-            if let Some(pid) = part_ids.get(&part_map_key).copied() {
+            if let Some(&pid) = parts.by_unique.get(comp_unique) {
+                // 同一配方路径只留在先遇到的那把枪上。改 weapon_id 会和目标枪已有的同名部件撞唯一约束，整次导入被回滚。
                 tx.execute(
-                    "UPDATE weapon_part SET weapon_id=?2, part_key=?3, name_zh=?4, need_qty=?5, sort_order=?6
-                     WHERE id=?1",
-                    params![pid, weapon_id, meta.key, meta.name_zh, need_qty, meta.sort],
+                    "UPDATE weapon_part SET need_qty=?2 WHERE id=?1 AND weapon_id=?3",
+                    params![pid, need_qty, weapon_id],
                 )
-                .map_err(|e| format!("更新武器部件 {part_map_key} 失败: {e}"))?;
-            } else {
-                let pid = snowflake.next_id();
-                tx.execute(
-                    "INSERT INTO weapon_part (id, weapon_id, part_key, name_zh, need_qty, sort_order)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    params![pid, weapon_id, meta.key, meta.name_zh, need_qty, meta.sort],
-                )
-                .map_err(|e| format!("插入武器部件 {part_map_key} 失败: {e}"))?;
-                part_ids.insert(part_map_key, pid);
-                stats.parts += 1;
+                .map_err(|e| format!("更新武器部件 {comp_unique} 失败: {e}"))?;
+                continue;
             }
+
+            // 旧行没有路径：只有后缀表认得出的键才认领，避免叶子短名误占别的部件。
+            if weapon_part_meta(&comp.name).is_some() {
+                let claim_key = format!("{}#{}", w.unique_name, preferred_key);
+                if let Some(pid) = parts.claimable.remove(&claim_key) {
+                    tx.execute(
+                        "UPDATE weapon_part SET weapon_id=?2, need_qty=?3, unique_name=?4 WHERE id=?1",
+                        params![pid, weapon_id, need_qty, comp_unique],
+                    )
+                    .map_err(|e| format!("回填武器部件 {comp_unique} 失败: {e}"))?;
+                    parts.by_unique.insert(comp_unique.to_string(), pid);
+                    continue;
+                }
+            }
+
+            let part_key =
+                take_part_key(&mut parts.occupied, weapon_id, preferred_key, comp_unique);
+            let pid = snowflake.next_id();
+            tx.execute(
+                "INSERT INTO weapon_part
+                 (id, weapon_id, part_key, name_zh, need_qty, sort_order, unique_name)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![pid, weapon_id, part_key, name_zh, need_qty, sort, comp_unique],
+            )
+            .map_err(|e| format!("插入武器部件 {comp_unique} 失败: {e}"))?;
+            parts.by_unique.insert(comp_unique.to_string(), pid);
+            stats.parts += 1;
         }
     }
 
@@ -358,10 +377,52 @@ fn load_weapon_map(tx: &Transaction<'_>) -> Result<HashMap<String, i64>, String>
     Ok(map)
 }
 
-fn load_part_map(tx: &Transaction<'_>) -> Result<HashMap<String, i64>, String> {
+struct PartIndex {
+    /// 配方路径 → 部件 id。已有路径的行按这个更新，不另起一行。
+    by_unique: HashMap<String, i64>,
+    /// `武器路径#后缀键` → 还没有路径的旧行，只用于第一次回填。
+    claimable: HashMap<String, i64>,
+    /// 同一把枪上已经占用的 part_key。左右拳套都会落到 gauntlet，第二条改用叶子名。
+    occupied: HashSet<(i64, String)>,
+}
+
+/// 同一把枪的 part_key 必须唯一。首选键被占时改用配方叶子，再不行就加序号。
+fn take_part_key(
+    occupied: &mut HashSet<(i64, String)>,
+    weapon_id: i64,
+    preferred: String,
+    unique_name: &str,
+) -> String {
+    if occupied.insert((weapon_id, preferred.clone())) {
+        return preferred;
+    }
+    let leaf = unique_name.rsplit('/').next().unwrap_or("");
+    let leaf_key: String = leaf
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    if !leaf_key.is_empty()
+        && leaf_key != preferred
+        && occupied.insert((weapon_id, leaf_key.clone()))
+    {
+        return leaf_key;
+    }
+    for n in 2..64 {
+        let key = format!("{preferred}{n}");
+        if occupied.insert((weapon_id, key.clone())) {
+            return key;
+        }
+    }
+    let key = format!("{preferred}_{leaf_key}");
+    occupied.insert((weapon_id, key.clone()));
+    key
+}
+
+fn load_part_index(tx: &Transaction<'_>) -> Result<PartIndex, String> {
     let mut stmt = tx
         .prepare(
-            "SELECT w.unique_name, p.part_key, p.id
+            "SELECT w.id, w.unique_name, p.part_key, p.id, p.unique_name
              FROM weapon_part p
              JOIN weapon w ON w.id = p.weapon_id
              WHERE w.unique_name IS NOT NULL",
@@ -370,18 +431,31 @@ fn load_part_map(tx: &Transaction<'_>) -> Result<HashMap<String, i64>, String> {
     let rows = stmt
         .query_map([], |r| {
             Ok((
-                r.get::<_, String>(0)?,
+                r.get::<_, i64>(0)?,
                 r.get::<_, String>(1)?,
-                r.get::<_, i64>(2)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, i64>(3)?,
+                r.get::<_, Option<String>>(4)?,
             ))
         })
         .map_err(|e| e.to_string())?;
-    let mut map = HashMap::new();
+    let mut index = PartIndex {
+        by_unique: HashMap::new(),
+        claimable: HashMap::new(),
+        occupied: HashSet::new(),
+    };
     for r in rows {
-        let (uniq, pkey, id) = r.map_err(|e| e.to_string())?;
-        map.insert(format!("{uniq}#{pkey}"), id);
+        let (weapon_id, weapon_unique, pkey, id, part_unique) = r.map_err(|e| e.to_string())?;
+        index.occupied.insert((weapon_id, pkey.clone()));
+        if let Some(part_unique) = part_unique.filter(|s| !s.trim().is_empty()) {
+            index.by_unique.insert(part_unique, id);
+        } else {
+            index
+                .claimable
+                .insert(format!("{weapon_unique}#{pkey}"), id);
+        }
     }
-    Ok(map)
+    Ok(index)
 }
 
 fn load_variant_owner(tx: &Transaction<'_>) -> Result<HashMap<(i64, i32), i64>, String> {

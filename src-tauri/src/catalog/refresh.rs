@@ -3,27 +3,27 @@ use std::path::Path;
 use chrono::{DateTime, Duration, Utc};
 
 use crate::catalog::arcanes::{backfill_arcane_name_zh, import_arcanes_json};
-use crate::catalog::nicknames::apply_bundled_warframe_nicknames;
 use crate::catalog::drop_locations::{
-    fetch_drop_all, refresh_drop_locations_conn, DEFAULT_DROP_ALL_URLS,
+    fetch_drop_all, refresh_drop_locations_conn, DEFAULT_DROP_ALL_URL,
 };
 use crate::catalog::import::{
     count_families, import_archwing_json, import_modular_companions_json, import_pets_json,
     import_sentinels_json, import_warframes_json, ImportStats,
 };
 use crate::catalog::mods::import_mods_json;
+use crate::catalog::nicknames::apply_bundled_warframe_nicknames;
 use crate::catalog::relics::{
-    fetch_relics, import_relics_json, RelicImportStats, DEFAULT_RELICS_URLS,
+    fetch_relics, import_relics_json, RelicImportStats, DEFAULT_RELICS_URL,
 };
 use crate::catalog::upstream_cache;
 use crate::catalog::weapons::{
     import_archwing_weapons_json, import_modular_weapons_json, import_weapons_json,
 };
 use crate::catalog::wfcd::{
-    fetch_archwings, fetch_json_urls, fetch_pets, fetch_sentinels, fetch_warframes, FetchResult,
-    DEFAULT_ARCH_GUN_URLS, DEFAULT_ARCH_MELEE_URLS, DEFAULT_ARCHWING_URLS, DEFAULT_ARCANES_URLS,
-    DEFAULT_MELEE_URLS, DEFAULT_MISC_URLS, DEFAULT_MODS_URLS, DEFAULT_PETS_URLS,
-    DEFAULT_PRIMARY_URLS, DEFAULT_SECONDARY_URLS, DEFAULT_SENTINELS_URLS, DEFAULT_WARFRAMES_URLS,
+    fetch_archwings, fetch_json_url, fetch_pets, fetch_sentinels, fetch_warframes, FetchResult,
+    DEFAULT_ARCANES_URL, DEFAULT_ARCHWING_URL, DEFAULT_ARCH_GUN_URL, DEFAULT_ARCH_MELEE_URL,
+    DEFAULT_MELEE_URL, DEFAULT_MISC_URL, DEFAULT_MODS_URL, DEFAULT_PETS_URL, DEFAULT_PRIMARY_URL,
+    DEFAULT_SECONDARY_URL, DEFAULT_SENTINELS_URL, DEFAULT_WARFRAMES_URL,
 };
 use crate::db::{self, open_catalog, open_user};
 use crate::id::Snowflake;
@@ -39,6 +39,9 @@ const SETTING_MELEE_ETAG: &str = "catalog_melee_etag";
 const SETTING_ARCH_GUN_ETAG: &str = "catalog_arch_gun_etag";
 const SETTING_ARCH_MELEE_ETAG: &str = "catalog_arch_melee_etag";
 const SETTING_MISC_ETAG: &str = "catalog_misc_etag";
+/// 旧库部件补过配方路径之后置 1，避免每次 304 都重导。
+const SETTING_WEAPON_PART_UID: &str = "catalog_weapon_part_uid_backfill";
+const SETTING_SUIT_PART_UID: &str = "catalog_suit_part_uid_backfill";
 const SETTING_MODS_ETAG: &str = "catalog_mods_etag";
 const SETTING_ARCANES_ETAG: &str = "catalog_arcanes_etag";
 const SETTING_DROP_ETAG: &str = "catalog_drop_locations_etag";
@@ -64,7 +67,6 @@ pub enum RefreshOutcome {
 pub fn refresh_catalog_if_needed(
     data_dir: &Path,
     snowflake: &Snowflake,
-    urls: &[&str],
 ) -> Result<RefreshOutcome, String> {
     db::init_databases(data_dir)?;
 
@@ -82,15 +84,12 @@ pub fn refresh_catalog_if_needed(
             .query_row("SELECT COUNT(*) FROM void_relic", [], |r| r.get(0))
             .unwrap_or(0);
         if relic_n > 0 {
-            match refresh_drop_locations_conn(data_dir, &mut catalog, &user, snowflake, false) {
-                Ok(s) if s.locations > 0 => {
-                    eprintln!(
-                        "[仓鼠] 遗物来源补全: locations≈{} mission≈{} bounty≈{}",
-                        s.locations, s.mission, s.bounty
-                    );
-                }
-                Ok(_) => {}
-                Err(e) => eprintln!("[仓鼠] 遗物来源补全失败: {e}"),
+            let s = refresh_drop_locations_conn(data_dir, &mut catalog, &user, snowflake, false)?;
+            if s.locations > 0 {
+                eprintln!(
+                    "[仓鼠] 遗物来源补全: locations≈{} mission≈{} bounty≈{}",
+                    s.locations, s.mission, s.bounty
+                );
             }
         }
         return Ok(RefreshOutcome::SkippedFresh);
@@ -102,22 +101,22 @@ pub fn refresh_catalog_if_needed(
         db::get_setting(&catalog, SETTING_ETAG)?
     };
 
-    let fetched = fetch_warframes(urls, prev_etag.as_deref())?;
+    let fetched = fetch_warframes(DEFAULT_WARFRAMES_URL, prev_etag.as_deref())?;
     let now = Utc::now().to_rfc3339();
     db::set_setting(&catalog, SETTING_CHECKED_AT, &now)?;
 
     if fetched.not_modified {
-        // 战甲未变时仍刷 Archwing / 守护 + 用遗物 ETag 试刷（月检同触发）
-        refresh_archwing_best_effort(data_dir, &mut catalog, snowflake);
-        refresh_companions_best_effort(data_dir, &mut catalog, snowflake);
+        // 战甲未变时仍刷 Archwing / 守护 + 遗物。任一拉取失败则停掉后面的步骤。
+        refresh_archwing(data_dir, &mut catalog, snowflake)?;
+        refresh_companions(data_dir, &mut catalog, snowflake)?;
         let _ = refresh_relics(data_dir, &mut catalog, &user, snowflake, false, true)?;
         return Ok(RefreshOutcome::NotModified);
     }
 
     upstream_cache::save(data_dir, upstream_cache::WARFRAMES, &fetched.body)?;
     let stats = import_warframes_json(&mut catalog, &fetched.body, snowflake)?;
-    refresh_archwing_best_effort(data_dir, &mut catalog, snowflake);
-    refresh_companions_best_effort(data_dir, &mut catalog, snowflake);
+    refresh_archwing(data_dir, &mut catalog, snowflake)?;
+    refresh_companions(data_dir, &mut catalog, snowflake)?;
     let relic_stats = refresh_relics(data_dir, &mut catalog, &user, snowflake, true, true)?;
 
     if let Some(ref etag) = fetched.etag {
@@ -133,120 +132,84 @@ pub fn refresh_catalog_if_needed(
     })
 }
 
-fn refresh_archwing_best_effort(
+fn refresh_archwing(
     data_dir: &Path,
     catalog: &mut rusqlite::Connection,
     snowflake: &Snowflake,
-) {
-    match fetch_archwings(DEFAULT_ARCHWING_URLS, None) {
-        Ok(fetched) if !fetched.not_modified => {
-            if let Err(e) = upstream_cache::save(data_dir, upstream_cache::ARCHWING, &fetched.body)
-            {
-                eprintln!("[仓鼠] Archwing 缓存失败: {e}");
-                return;
-            }
-            match import_archwing_json(catalog, &fetched.body, snowflake) {
-                Ok(s) => eprintln!(
-                    "[仓鼠] Archwing 导入: 家族+{} 变体+{} 部件+{}",
-                    s.families, s.warframes, s.parts
-                ),
-                Err(e) => eprintln!("[仓鼠] Archwing 导入失败: {e}"),
-            }
-        }
-        Ok(_) => {}
-        Err(e) => eprintln!("[仓鼠] Archwing 拉取失败（可稍后重试）: {e}"),
+) -> Result<(), String> {
+    let fetched = fetch_archwings(DEFAULT_ARCHWING_URL, None)?;
+    if fetched.not_modified {
+        return Ok(());
     }
+    upstream_cache::save(data_dir, upstream_cache::ARCHWING, &fetched.body)?;
+    let s = import_archwing_json(catalog, &fetched.body, snowflake)?;
+    eprintln!(
+        "[仓鼠] Archwing 导入: 家族+{} 变体+{} 部件+{}",
+        s.families, s.warframes, s.parts
+    );
+    Ok(())
 }
 
-fn refresh_sentinels_best_effort(
+fn refresh_sentinels(
     data_dir: &Path,
     catalog: &mut rusqlite::Connection,
     snowflake: &Snowflake,
-) {
-    match fetch_sentinels(DEFAULT_SENTINELS_URLS, None) {
-        Ok(fetched) if !fetched.not_modified => {
-            if let Err(e) =
-                upstream_cache::save(data_dir, upstream_cache::SENTINELS, &fetched.body)
-            {
-                eprintln!("[仓鼠] 哨兵缓存失败: {e}");
-                return;
-            }
-            match import_sentinels_json(catalog, &fetched.body, snowflake) {
-                Ok(s) => eprintln!(
-                    "[仓鼠] 哨兵导入: 家族+{} 变体+{} 部件+{}",
-                    s.families, s.warframes, s.parts
-                ),
-                Err(e) => eprintln!("[仓鼠] 哨兵导入失败: {e}"),
-            }
-        }
-        Ok(_) => {}
-        Err(e) => eprintln!("[仓鼠] 哨兵拉取失败（可稍后重试）: {e}"),
+) -> Result<(), String> {
+    let fetched = fetch_sentinels(DEFAULT_SENTINELS_URL, None)?;
+    if fetched.not_modified {
+        return Ok(());
     }
+    upstream_cache::save(data_dir, upstream_cache::SENTINELS, &fetched.body)?;
+    let s = import_sentinels_json(catalog, &fetched.body, snowflake)?;
+    eprintln!(
+        "[仓鼠] 哨兵导入: 家族+{} 变体+{} 部件+{}",
+        s.families, s.warframes, s.parts
+    );
+    Ok(())
 }
 
-fn refresh_pets_best_effort(
+fn refresh_pets(
     data_dir: &Path,
     catalog: &mut rusqlite::Connection,
     snowflake: &Snowflake,
-) {
-    let body = match fetch_pets(DEFAULT_PETS_URLS, None) {
-        Ok(fetched) if !fetched.not_modified => {
-            if let Err(e) = upstream_cache::save(data_dir, upstream_cache::PETS, &fetched.body) {
-                eprintln!("[仓鼠] 宠物同伴缓存失败: {e}");
-                return;
-            }
-            match import_pets_json(catalog, &fetched.body, snowflake) {
-                Ok(s) => eprintln!(
-                    "[仓鼠] 宠物同伴导入: 家族+{} 变体+{} 部件+{}",
-                    s.families, s.warframes, s.parts
-                ),
-                Err(e) => eprintln!("[仓鼠] 宠物同伴导入失败: {e}"),
-            }
-            fetched.body
+) -> Result<(), String> {
+    let fetched = fetch_pets(DEFAULT_PETS_URL, None)?;
+    let body = if fetched.not_modified {
+        match upstream_cache::read(data_dir, upstream_cache::PETS)? {
+            Some(cached) => cached,
+            None => return Ok(()),
         }
-        Ok(_) => match upstream_cache::read(data_dir, upstream_cache::PETS) {
-            Ok(Some(cached)) => cached,
-            Ok(None) => {
-                eprintln!("[仓鼠] 宠物同伴 304 且本地无缓存，跳过自制同伴");
-                return;
-            }
-            Err(e) => {
-                eprintln!("[仓鼠] 读宠物同伴缓存失败: {e}");
-                return;
-            }
-        },
-        Err(e) => {
-            eprintln!("[仓鼠] 宠物同伴拉取失败（可稍后重试）: {e}");
-            // 仍尝试本地缓存导入自制型号（升级后首次）
-            match upstream_cache::read(data_dir, upstream_cache::PETS) {
-                Ok(Some(cached)) => cached,
-                _ => return,
-            }
-        }
+    } else {
+        upstream_cache::save(data_dir, upstream_cache::PETS, &fetched.body)?;
+        let s = import_pets_json(catalog, &fetched.body, snowflake)?;
+        eprintln!(
+            "[仓鼠] 宠物同伴导入: 家族+{} 变体+{} 部件+{}",
+            s.families, s.warframes, s.parts
+        );
+        fetched.body
     };
-    match import_modular_companions_json(catalog, &body, snowflake) {
-        Ok(s) => eprintln!(
-            "[仓鼠] 自制同伴导入: 家族+{} 型号+{}",
-            s.families, s.warframes
-        ),
-        Err(e) => eprintln!("[仓鼠] 自制同伴导入失败: {e}"),
-    }
+    let s = import_modular_companions_json(catalog, &body, snowflake)?;
+    eprintln!(
+        "[仓鼠] 自制同伴导入: 家族+{} 型号+{}",
+        s.families, s.warframes
+    );
+    Ok(())
 }
 
-fn refresh_companions_best_effort(
+fn refresh_companions(
     data_dir: &Path,
     catalog: &mut rusqlite::Connection,
     snowflake: &Snowflake,
-) {
-    refresh_sentinels_best_effort(data_dir, catalog, snowflake);
-    refresh_pets_best_effort(data_dir, catalog, snowflake);
+) -> Result<(), String> {
+    refresh_sentinels(data_dir, catalog, snowflake)?;
+    refresh_pets(data_dir, catalog, snowflake)?;
+    Ok(())
 }
 
 /// 维护者脚本 / 测试：忽略月限与 ETag，强制拉取并导入。
 pub fn force_refresh_catalog(
     data_dir: &Path,
     snowflake: &Snowflake,
-    urls: &[&str],
 ) -> Result<ImportStats, String> {
     db::init_databases(data_dir)?;
     let catalog_path = db::catalog_path(data_dir);
@@ -254,14 +217,14 @@ pub fn force_refresh_catalog(
     let mut catalog = open_catalog(&catalog_path)?;
     let user = open_user(&user_path)?;
 
-    let fetched = fetch_warframes(urls, None)?;
+    let fetched = fetch_warframes(DEFAULT_WARFRAMES_URL, None)?;
     if fetched.not_modified {
         return Err("上游返回未修改，但强制刷新未带 ETag".into());
     }
     upstream_cache::save(data_dir, upstream_cache::WARFRAMES, &fetched.body)?;
     let stats = import_warframes_json(&mut catalog, &fetched.body, snowflake)?;
-    refresh_archwing_best_effort(data_dir, &mut catalog, snowflake);
-    refresh_companions_best_effort(data_dir, &mut catalog, snowflake);
+    refresh_archwing(data_dir, &mut catalog, snowflake)?;
+    refresh_companions(data_dir, &mut catalog, snowflake)?;
     let nick_n = apply_bundled_warframe_nicknames(&catalog)?;
     if nick_n > 0 {
         eprintln!("[仓鼠] 俗称写回 ≈{nick_n}");
@@ -287,10 +250,10 @@ pub fn update_warframes_catalog(data_dir: &Path, snowflake: &Snowflake) -> Resul
     let mut catalog = open_catalog(&db::catalog_path(data_dir))?;
     let user = open_user(&db::user_path(data_dir))?;
     let prev = db::get_setting(&catalog, SETTING_ETAG)?;
-    let fetched = fetch_warframes(DEFAULT_WARFRAMES_URLS, prev.as_deref())?;
+    let fetched = fetch_warframes(DEFAULT_WARFRAMES_URL, prev.as_deref())?;
     if fetched.not_modified {
-        refresh_archwing_best_effort(data_dir, &mut catalog, snowflake);
-        refresh_companions_best_effort(data_dir, &mut catalog, snowflake);
+        refresh_archwing(data_dir, &mut catalog, snowflake)?;
+        refresh_companions(data_dir, &mut catalog, snowflake)?;
         let nick_n = apply_bundled_warframe_nicknames(&catalog)?;
         return Ok(if nick_n > 0 {
             format!("战甲已是最新；俗称≈{nick_n}")
@@ -300,8 +263,8 @@ pub fn update_warframes_catalog(data_dir: &Path, snowflake: &Snowflake) -> Resul
     }
     upstream_cache::save(data_dir, upstream_cache::WARFRAMES, &fetched.body)?;
     let stats = import_warframes_json(&mut catalog, &fetched.body, snowflake)?;
-    refresh_archwing_best_effort(data_dir, &mut catalog, snowflake);
-    refresh_companions_best_effort(data_dir, &mut catalog, snowflake);
+    refresh_archwing(data_dir, &mut catalog, snowflake)?;
+    refresh_companions(data_dir, &mut catalog, snowflake)?;
     let nick_n = apply_bundled_warframe_nicknames(&catalog)?;
     let relic_stats = refresh_relics(data_dir, &mut catalog, &user, snowflake, false, false)?;
     let now = Utc::now().to_rfc3339();
@@ -333,7 +296,7 @@ pub fn update_weapons_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<
     let primary = fetch_slot_with_cache(
         data_dir,
         &catalog,
-        DEFAULT_PRIMARY_URLS,
+        DEFAULT_PRIMARY_URL,
         SETTING_PRIMARY_ETAG,
         upstream_cache::PRIMARY,
         90,
@@ -341,7 +304,7 @@ pub fn update_weapons_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<
     let secondary = fetch_slot_with_cache(
         data_dir,
         &catalog,
-        DEFAULT_SECONDARY_URLS,
+        DEFAULT_SECONDARY_URL,
         SETTING_SECONDARY_ETAG,
         upstream_cache::SECONDARY,
         90,
@@ -349,7 +312,7 @@ pub fn update_weapons_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<
     let melee = fetch_slot_with_cache(
         data_dir,
         &catalog,
-        DEFAULT_MELEE_URLS,
+        DEFAULT_MELEE_URL,
         SETTING_MELEE_ETAG,
         upstream_cache::MELEE,
         90,
@@ -357,7 +320,7 @@ pub fn update_weapons_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<
     let arch_gun = fetch_slot_with_cache(
         data_dir,
         &catalog,
-        DEFAULT_ARCH_GUN_URLS,
+        DEFAULT_ARCH_GUN_URL,
         SETTING_ARCH_GUN_ETAG,
         upstream_cache::ARCH_GUN,
         90,
@@ -365,7 +328,7 @@ pub fn update_weapons_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<
     let arch_melee = fetch_slot_with_cache(
         data_dir,
         &catalog,
-        DEFAULT_ARCH_MELEE_URLS,
+        DEFAULT_ARCH_MELEE_URL,
         SETTING_ARCH_MELEE_ETAG,
         upstream_cache::ARCH_MELEE,
         90,
@@ -373,7 +336,7 @@ pub fn update_weapons_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<
     let misc = fetch_slot_with_cache(
         data_dir,
         &catalog,
-        DEFAULT_MISC_URLS,
+        DEFAULT_MISC_URL,
         SETTING_MISC_ETAG,
         upstream_cache::MISC,
         90,
@@ -382,15 +345,16 @@ pub fn update_weapons_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<
     let need_ground = !(primary.all_cached && secondary.all_cached && melee.all_cached);
     let need_arch = !(arch_gun.all_cached && arch_melee.all_cached);
     let need_modular = !(misc.all_cached && melee.all_cached);
+    let backfill = needs_weapon_part_uid_backfill(&catalog)?;
 
-    if !need_ground && !need_arch && !need_modular {
+    if !need_ground && !need_arch && !need_modular && !backfill {
         return Ok("武器已是最新".into());
     }
 
     let mut fam = 0usize;
     let mut wep = 0usize;
     let mut parts = 0usize;
-    if need_ground {
+    if need_ground || backfill {
         let stats = import_weapons_json(
             &mut catalog,
             &primary.body,
@@ -402,7 +366,7 @@ pub fn update_weapons_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<
         wep += stats.weapons;
         parts += stats.parts;
     }
-    if need_arch {
+    if need_arch || backfill {
         let stats = import_archwing_weapons_json(
             &mut catalog,
             &arch_gun.body,
@@ -413,11 +377,15 @@ pub fn update_weapons_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<
         wep += stats.weapons;
         parts += stats.parts;
     }
-    if need_modular {
+    if need_modular || backfill {
         let stats =
             import_modular_weapons_json(&mut catalog, &misc.body, &melee.body, snowflake)?;
         fam += stats.families;
         wep += stats.weapons;
+    }
+    if backfill {
+        relink_weapon_parts_after_import(data_dir, &mut catalog, snowflake)?;
+        db::set_setting(&catalog, SETTING_WEAPON_PART_UID, "1")?;
     }
     let relic_stats = refresh_relics(data_dir, &mut catalog, &user, snowflake, false, false)?;
     Ok(format!(
@@ -433,16 +401,16 @@ pub fn update_mods_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<Str
     let _user = open_user(&db::user_path(data_dir))?;
     let mods_prev = db::get_setting(&catalog, SETTING_MODS_ETAG)?;
     let drops_prev = db::get_setting(&catalog, SETTING_DROP_ETAG)?;
-    let mods = fetch_json_urls(DEFAULT_MODS_URLS, mods_prev.as_deref(), 120)?;
-    let drops = fetch_drop_all(DEFAULT_DROP_ALL_URLS, drops_prev.as_deref())?;
+    let mods = fetch_json_url(DEFAULT_MODS_URL, mods_prev.as_deref(), 120)?;
+    let drops = fetch_drop_all(DEFAULT_DROP_ALL_URL, drops_prev.as_deref())?;
 
     if mods.not_modified && drops.not_modified {
         return Ok("Mod 已是最新".into());
     }
 
-    let mods_body = resolve_body(data_dir, &mods, DEFAULT_MODS_URLS, upstream_cache::MODS, 120)?;
+    let mods_body = resolve_body(data_dir, &mods, DEFAULT_MODS_URL, upstream_cache::MODS, 120)?;
     let drops_body =
-        resolve_drop_body(data_dir, &drops, DEFAULT_DROP_ALL_URLS, upstream_cache::DROP_ALL)?;
+        resolve_drop_body(data_dir, &drops, DEFAULT_DROP_ALL_URL, upstream_cache::DROP_ALL)?;
 
     if !mods.not_modified {
         upstream_cache::save(data_dir, upstream_cache::MODS, &mods_body)?;
@@ -474,7 +442,7 @@ pub fn update_arcanes_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<
     let _user = open_user(&db::user_path(data_dir))?;
 
     let prev = db::get_setting(&catalog, SETTING_ARCANES_ETAG)?;
-    let fetched = fetch_json_urls(DEFAULT_ARCANES_URLS, prev.as_deref(), 90)?;
+    let fetched = fetch_json_url(DEFAULT_ARCANES_URL, prev.as_deref(), 90)?;
     if fetched.not_modified {
         let filled = backfill_arcane_name_zh(&catalog)?;
         return Ok(if filled > 0 {
@@ -505,31 +473,16 @@ pub fn update_relics_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<S
     let mut catalog = open_catalog(&db::catalog_path(data_dir))?;
     let user = open_user(&db::user_path(data_dir))?;
     let prev = db::get_setting(&catalog, SETTING_RELICS_ETAG)?;
-    let fetched = fetch_relics(DEFAULT_RELICS_URLS, prev.as_deref())?;
+    let fetched = fetch_relics(DEFAULT_RELICS_URL, prev.as_deref())?;
     if fetched.not_modified {
-        match refresh_drop_locations_conn(data_dir, &mut catalog, &user, snowflake, false) {
-            Ok(s) if s.locations > 0 => {
-                return Ok(format!(
-                    "遗物已是最新；来源≈{} mission≈{} bounty≈{}",
-                    s.locations, s.mission, s.bounty
-                ));
-            }
-            Ok(_) => {
-                let locs: i64 = catalog
-                    .query_row("SELECT COUNT(*) FROM relic_location", [], |r| r.get(0))
-                    .unwrap_or(0);
-                if locs == 0 {
-                    return Err(
-                        "遗物已是最新，但来源表为空且回填失败（请确认 upstream/drop-all.json）"
-                            .into(),
-                    );
-                }
-                return Ok("遗物已是最新".into());
-            }
-            Err(e) => {
-                return Err(format!("遗物已是最新，但来源回填失败: {e}"));
-            }
+        let s = refresh_drop_locations_conn(data_dir, &mut catalog, &user, snowflake, false)?;
+        if s.locations > 0 {
+            return Ok(format!(
+                "遗物已是最新；来源≈{} mission≈{} bounty≈{}",
+                s.locations, s.mission, s.bounty
+            ));
         }
+        return Ok("遗物已是最新".into());
     }
     upstream_cache::save(data_dir, upstream_cache::RELICS, &fetched.body)?;
     let relic_stats = import_relics_json(&mut catalog, &fetched.body, snowflake)?;
@@ -540,7 +493,7 @@ pub fn update_relics_catalog(data_dir: &Path, snowflake: &Snowflake) -> Result<S
         refresh_drop_locations_conn(data_dir, &mut catalog, &user, snowflake, true).map_err(
             |e| {
                 format!(
-                    "遗物≈{} 已导入，但来源回填失败: {e}",
+                    "遗物≈{} 已导入，来源更新失败，已保留原来源: {e}",
                     relic_stats.relics
                 )
             },
@@ -575,30 +528,15 @@ fn refresh_relics(
     } else {
         db::get_setting(catalog, SETTING_RELICS_ETAG)?
     };
-    let fetched = fetch_relics(DEFAULT_RELICS_URLS, prev.as_deref())?;
+    let fetched = fetch_relics(DEFAULT_RELICS_URL, prev.as_deref())?;
     if fetched.not_modified {
         if with_drops {
-            match refresh_drop_locations_conn(data_dir, catalog, user, snowflake, false) {
-                Ok(s) if s.locations > 0 => {
-                    eprintln!(
-                        "[仓鼠] 遗物来源补全: locations≈{} mission≈{} bounty≈{}",
-                        s.locations, s.mission, s.bounty
-                    );
-                }
-                Ok(_) => {
-                    let locs: i64 = catalog
-                        .query_row("SELECT COUNT(*) FROM relic_location", [], |r| r.get(0))
-                        .unwrap_or(0);
-                    if locs == 0 {
-                        return Err(
-                            "遗物未变，但来源表为空且回填失败（请确认 upstream/drop-all.json）"
-                                .into(),
-                        );
-                    }
-                }
-                Err(e) => {
-                    return Err(format!("遗物来源补全失败: {e}"));
-                }
+            let s = refresh_drop_locations_conn(data_dir, catalog, user, snowflake, false)?;
+            if s.locations > 0 {
+                eprintln!(
+                    "[仓鼠] 遗物来源补全: locations≈{} mission≈{} bounty≈{}",
+                    s.locations, s.mission, s.bounty
+                );
             }
         }
         return Ok(RelicImportStats::default());
@@ -610,7 +548,7 @@ fn refresh_relics(
     }
     if with_drops {
         let drop_stats = refresh_drop_locations_conn(data_dir, catalog, user, snowflake, true)
-            .map_err(|e| format!("遗物已导入，但来源回填失败: {e}"))?;
+            .map_err(|e| format!("遗物已导入，来源更新失败，已保留原来源: {e}"))?;
         eprintln!(
             "[仓鼠] 遗物来源已更新: locations≈{} mission≈{} bounty≈{}",
             drop_stats.locations, drop_stats.mission, drop_stats.bounty
@@ -629,13 +567,13 @@ struct SlotFetch {
 fn fetch_slot_with_cache(
     data_dir: &Path,
     catalog: &rusqlite::Connection,
-    urls: &[&str],
+    url: &str,
     etag_key: &str,
     filename: &str,
     timeout_secs: u64,
 ) -> Result<SlotFetch, String> {
     let prev = db::get_setting(catalog, etag_key)?;
-    let fetched = fetch_json_urls(urls, prev.as_deref(), timeout_secs)?;
+    let fetched = fetch_json_url(url, prev.as_deref(), timeout_secs)?;
     if fetched.not_modified {
         if let Some(cached) = upstream_cache::read(data_dir, filename)? {
             return Ok(SlotFetch {
@@ -643,7 +581,7 @@ fn fetch_slot_with_cache(
                 all_cached: true,
             });
         }
-        let fresh = fetch_json_urls(urls, None, timeout_secs)?;
+        let fresh = fetch_json_url(url, None, timeout_secs)?;
         if fresh.not_modified {
             return Err(format!("上游 304 且本地无 {filename}"));
         }
@@ -669,7 +607,7 @@ fn fetch_slot_with_cache(
 fn resolve_body(
     data_dir: &Path,
     fetched: &FetchResult,
-    urls: &[&str],
+    url: &str,
     filename: &str,
     timeout_secs: u64,
 ) -> Result<Vec<u8>, String> {
@@ -679,7 +617,7 @@ fn resolve_body(
     if let Some(cached) = upstream_cache::read(data_dir, filename)? {
         return Ok(cached);
     }
-    let fresh = fetch_json_urls(urls, None, timeout_secs)?;
+    let fresh = fetch_json_url(url, None, timeout_secs)?;
     if fresh.not_modified {
         return Err(format!("上游 304 且本地无 {filename}"));
     }
@@ -690,7 +628,7 @@ fn resolve_body(
 fn resolve_drop_body(
     data_dir: &Path,
     fetched: &FetchResult,
-    urls: &[&str],
+    url: &str,
     filename: &str,
 ) -> Result<Vec<u8>, String> {
     if !fetched.not_modified {
@@ -699,12 +637,144 @@ fn resolve_drop_body(
     if let Some(cached) = upstream_cache::read(data_dir, filename)? {
         return Ok(cached);
     }
-    let fresh = fetch_drop_all(urls, None)?;
+    let fresh = fetch_drop_all(url, None)?;
     if fresh.not_modified {
         return Err(format!("上游 304 且本地无 {filename}"));
     }
     upstream_cache::save(data_dir, filename, &fresh.body)?;
     Ok(fresh.body)
+}
+
+fn prime_weapon_parts_missing_unique(catalog: &rusqlite::Connection) -> Result<bool, String> {
+    let n: i64 = catalog
+        .query_row(
+            "SELECT COUNT(*) FROM weapon_part p
+             JOIN weapon w ON w.id = p.weapon_id
+             WHERE w.variant = ?1
+               AND (p.unique_name IS NULL OR TRIM(p.unique_name) = '')",
+            [super::weapons::VARIANT_PRIME],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(n > 0)
+}
+
+fn needs_weapon_part_uid_backfill(catalog: &rusqlite::Connection) -> Result<bool, String> {
+    if db::get_setting(catalog, SETTING_WEAPON_PART_UID)?.as_deref() == Some("1") {
+        return Ok(false);
+    }
+    prime_weapon_parts_missing_unique(catalog)
+}
+
+/// 奖励已在库里就按路径重挂；没有奖励时才用本地 Relics.json，避免清掉来源表。
+fn relink_weapon_parts_after_import(
+    data_dir: &Path,
+    catalog: &mut rusqlite::Connection,
+    snowflake: &Snowflake,
+) -> Result<(), String> {
+    let rewards: i64 = catalog
+        .query_row("SELECT COUNT(*) FROM relic_reward", [], |r| r.get(0))
+        .unwrap_or(0);
+    if rewards > 0 {
+        let n = super::relics::relink_weapon_parts_by_unique(catalog, snowflake)?;
+        eprintln!("[仓鼠] 武器部件按路径重链 ≈{n}");
+        return Ok(());
+    }
+    if let Some(body) = upstream_cache::read(data_dir, upstream_cache::RELICS)? {
+        let stats = import_relics_json(catalog, &body, snowflake)?;
+        eprintln!(
+            "[仓鼠] 用本地遗物缓存重链: relics≈{} 武器掉落≈{}",
+            stats.relics, stats.weapon_drops
+        );
+    }
+    Ok(())
+}
+
+/// 启动自愈：Prime 部件还没有配方路径时，只用本地缓存重导并重链，不发请求。
+pub fn heal_weapon_part_uniques(data_dir: &Path, snowflake: &Snowflake) -> Result<bool, String> {
+    let catalog_path = db::catalog_path(data_dir);
+    if !catalog_path.is_file() {
+        return Ok(false);
+    }
+    let mut catalog = open_catalog(&catalog_path)?;
+    if !needs_weapon_part_uid_backfill(&catalog)? {
+        return Ok(false);
+    }
+    let Some(primary) = upstream_cache::read(data_dir, upstream_cache::PRIMARY)? else {
+        return Ok(false);
+    };
+    let Some(secondary) = upstream_cache::read(data_dir, upstream_cache::SECONDARY)? else {
+        return Ok(false);
+    };
+    let Some(melee) = upstream_cache::read(data_dir, upstream_cache::MELEE)? else {
+        return Ok(false);
+    };
+    let stats = import_weapons_json(&mut catalog, &primary, &secondary, &melee, snowflake)?;
+    eprintln!(
+        "[仓鼠] 武器部件路径回填: 家族+{} 枪+{} 部件+{}",
+        stats.families, stats.weapons, stats.parts
+    );
+    if let (Some(arch_gun), Some(arch_melee)) = (
+        upstream_cache::read(data_dir, upstream_cache::ARCH_GUN)?,
+        upstream_cache::read(data_dir, upstream_cache::ARCH_MELEE)?,
+    ) {
+        let arch =
+            import_archwing_weapons_json(&mut catalog, &arch_gun, &arch_melee, snowflake)?;
+        eprintln!(
+            "[仓鼠] 空战武器部件路径回填: 家族+{} 枪+{} 部件+{}",
+            arch.families, arch.weapons, arch.parts
+        );
+    }
+    relink_weapon_parts_after_import(data_dir, &mut catalog, snowflake)?;
+    db::set_setting(&catalog, SETTING_WEAPON_PART_UID, "1")?;
+    Ok(true)
+}
+
+fn suit_parts_missing_unique(catalog: &rusqlite::Connection) -> Result<bool, String> {
+    let n: i64 = catalog
+        .query_row(
+            "SELECT COUNT(*) FROM warframe_part
+             WHERE unique_name IS NULL OR TRIM(unique_name) = ''",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(n > 0)
+}
+
+/// 启动自愈：机体部件还没有配方路径时，用本地缓存重导并按路径挂遗物，不发请求。
+pub fn heal_suit_part_uniques(data_dir: &Path, snowflake: &Snowflake) -> Result<bool, String> {
+    let catalog_path = db::catalog_path(data_dir);
+    if !catalog_path.is_file() {
+        return Ok(false);
+    }
+    let mut catalog = open_catalog(&catalog_path)?;
+    if db::get_setting(&catalog, SETTING_SUIT_PART_UID)?.as_deref() == Some("1") {
+        return Ok(false);
+    }
+    if !suit_parts_missing_unique(&catalog)? {
+        return Ok(false);
+    }
+    let Some(warframes) = upstream_cache::read(data_dir, upstream_cache::WARFRAMES)? else {
+        return Ok(false);
+    };
+    let Some(archwing) = upstream_cache::read(data_dir, upstream_cache::ARCHWING)? else {
+        return Ok(false);
+    };
+    let Some(sentinels) = upstream_cache::read(data_dir, upstream_cache::SENTINELS)? else {
+        return Ok(false);
+    };
+    let Some(pets) = upstream_cache::read(data_dir, upstream_cache::PETS)? else {
+        return Ok(false);
+    };
+    import_warframes_json(&mut catalog, &warframes, snowflake)?;
+    import_archwing_json(&mut catalog, &archwing, snowflake)?;
+    import_sentinels_json(&mut catalog, &sentinels, snowflake)?;
+    import_pets_json(&mut catalog, &pets, snowflake)?;
+    let n = super::relics::link_suit_relics_from_rewards(&mut catalog, snowflake)?;
+    eprintln!("[仓鼠] 机体部件按路径重链 ≈{n}");
+    db::set_setting(&catalog, SETTING_SUIT_PART_UID, "1")?;
+    Ok(true)
 }
 
 fn due_for_check(catalog: &rusqlite::Connection) -> Result<bool, String> {
@@ -758,13 +828,8 @@ mod tests {
         }
 
         let snow = Snowflake::new(1);
-        // URLs 故意不可达：若误走网络会失败；期望 SkippedFresh
-        let outcome = refresh_catalog_if_needed(
-            &dir,
-            &snow,
-            &["http://127.0.0.1:9/should-not-fetch"],
-        )
-        .unwrap();
+        // 未满月：不应访问网络
+        let outcome = refresh_catalog_if_needed(&dir, &snow).unwrap();
         assert!(matches!(outcome, RefreshOutcome::SkippedFresh));
         let _ = fs::remove_dir_all(&dir);
     }

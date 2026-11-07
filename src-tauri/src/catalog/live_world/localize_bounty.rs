@@ -1,12 +1,14 @@
 //! 开放世界声望势力与赏金任务种类本地化。
 
-/// 固定 11 势力（侧栏顺序）。
+/// 固定势力（侧栏顺序）。
 pub const BOUNTY_SYNDICATES: &[(&str, &str)] = &[
     ("CetusSyndicate", "Ostron"),
     ("QuillsSyndicate", "夜羽"),
     ("SolarisSyndicate", "索拉里斯联盟"),
     ("VentKidsSyndicate", "通风小子"),
     ("VoxSyndicate", "索拉里斯之声"),
+    ("NightcapSyndicate", "夜帽"),
+    ("ProfitTakerSyndicate", "大蜘蛛"),
     ("EntratiSyndicate", "英择谛"),
     ("NecraloidSyndicate", "殁世械灵"),
     ("ZarimanSyndicate", "坚守者"),
@@ -108,6 +110,14 @@ const JOB_TITLE_BY_BASE: &[(&str, &str)] = &[
     ("DeimosGrnSurvivorBounty", "蛮暴之力"),
     ("DeimosKeyPiecesBounty", "物资回收"),
     ("DeimosPurifyBounty", "异物取回"),
+    ("NightcapCritterLiberation", "解放小动物"),
+    ("NightcapCorporateRestructuring", "企业重组"),
+    ("NightcapWeedTheGarden", "花园除草"),
+    ("NightcapSteelPath", "钢铁之路"),
+    ("ProfitTakerPhase1", "阶段 1"),
+    ("ProfitTakerPhase2", "阶段 2"),
+    ("ProfitTakerPhase3", "阶段 3"),
+    ("ProfitTakerPhase4", "阶段 4"),
 ];
 
 /// 从 jobType 路径归类任务种类（稳定英文 key，供关注筛选）。
@@ -194,6 +204,8 @@ pub fn job_kind_zh(kind: &str) -> String {
         "VoidFlood" => "虚空洪流",
         "VoidCascade" => "虚空覆涌",
         "VoidArmageddon" => "虚空决战",
+        "Deepmine" => "深矿",
+        "Heist" => "抢劫",
         "Legacyte" => "传承种收割",
         "HellScrub" => "地狱净化",
         // 旧 cycle 挑战种类（兼容已存关注）
@@ -409,6 +421,391 @@ pub fn cycle_node_mission_kind(node: &str) -> (String, String) {
         return (e.kind.to_string(), e.kind_zh.to_string());
     }
     ("Challenge".into(), "挑战".into())
+}
+
+/// 做赏金涨声望、可以设关注的势力（侧栏顺序）。
+pub const WATCH_SYNDICATE_TAGS: &[&str] = &[
+    "CetusSyndicate",
+    "SolarisSyndicate",
+    "NightcapSyndicate",
+    "ProfitTakerSyndicate",
+    "EntratiSyndicate",
+    "ZarimanSyndicate",
+    "EntratiLabSyndicate",
+    "HexSyndicate",
+];
+
+pub(crate) fn is_bounty_watch_syndicate(tag: &str) -> bool {
+    WATCH_SYNDICATE_TAGS.contains(&tag)
+}
+
+pub(crate) fn is_cycle_watch_syndicate(tag: &str) -> bool {
+    matches!(
+        tag,
+        "ZarimanSyndicate" | "EntratiLabSyndicate" | "HexSyndicate"
+    )
+}
+
+/// 轮换三家的任务节点（关注 id）。
+pub(crate) fn cycle_watch_nodes(tag: &str) -> &'static [&'static str] {
+    match tag {
+        "HexSyndicate" => &[
+            "SolNode850",
+            "SolNode851",
+            "SolNode852",
+            "SolNode853",
+            "SolNode854",
+            "SolNode856",
+            "SolNode858",
+        ],
+        "ZarimanSyndicate" => &[
+            "SolNode230",
+            "SolNode231",
+            "SolNode232",
+            "SolNode233",
+            "SolNode235",
+        ],
+        "EntratiLabSyndicate" => &[
+            "SolNode715",
+            "SolNode716",
+            "SolNode717",
+            "SolNode718",
+            "SolNode719",
+            "SolNode721",
+        ],
+        _ => &[],
+    }
+}
+
+/// 挑战全池路径前缀。六人组在导出表里挂在 Vania 下，不在 1999 日历里。
+pub(crate) fn cycle_challenge_prefix(tag: &str) -> Option<&'static str> {
+    match tag {
+        "ZarimanSyndicate" => Some("/Lotus/Types/Challenges/Zariman/"),
+        "EntratiLabSyndicate" => Some("/Lotus/Types/Challenges/EntratiLab/"),
+        "HexSyndicate" => Some("/Lotus/Types/Challenges/Vania/"),
+        _ => None,
+    }
+}
+
+/// 平原赏金任务池：jobType 末段。金星带 Venus 前缀的重复项不单列。
+const CETUS_JOB_POOL: &[&str] = &[
+    "AssassinateBountyAss",
+    "AssassinateBountyCap",
+    "AttritionBountyCap",
+    "AttritionBountyExt",
+    "AttritionBountyLib",
+    "AttritionBountySab",
+    "CaptureBountyCapOne",
+    "CaptureBountyCapTwo",
+    "ReclamationBountyCache",
+    "ReclamationBountyCap",
+    "ReclamationBountyTheft",
+    "RescueBountyResc",
+    "SabotageBountySab",
+    "NarmerBountyAssassinate",
+    "NarmerBountyExterminate",
+    "NarmerBountyLiberation",
+];
+
+const SOLARIS_JOB_POOL: &[&str] = &[
+    "ArtifactJobAmbush",
+    "ArtifactJobExcavation",
+    "ArtifactJobRecovery",
+    "ChaosJobAssassinate",
+    "ChaosJobExcavation",
+    "CullJobAssassinate",
+    "CullJobExterminate",
+    "CullJobResource",
+    "HelpingJobCache",
+    "HelpingJobResource",
+    "HelpingJobSpy",
+    "IntelJobRecovery",
+    "IntelJobResource",
+    "IntelJobSpy",
+    "PreservationJobDefense",
+    "PreservationJobRecovery",
+    "PreservationJobResource",
+    "SpyJobSpy",
+    "TheftJobAmbush",
+    "TheftJobExcavation",
+    "TheftJobResource",
+    "WetworkJobAssassinate",
+    "WetworkJobSpy",
+    "NarmerBountyVenusAssassinate",
+    "NarmerBountyVenusExterminate",
+    "NarmerBountyVenusPreservation",
+    "NarmerBountyVenusTheftExcavation",
+];
+
+const ENTRATI_JOB_POOL: &[&str] = &[
+    "DeimosAreaDefenseBounty",
+    "DeimosAssassinateBounty",
+    "DeimosCrpSurvivorBounty",
+    "DeimosEndlessExcavateBounty",
+    "DeimosEndlessAreaDefenseBounty",
+    "DeimosEndlessPurifyBounty",
+    "DeimosExcavateBounty",
+    "DeimosGrnSurvivorBounty",
+    "DeimosKeyPiecesBounty",
+    "DeimosPurifyBounty",
+];
+
+const NIGHTCAP_JOB_POOL: &[&str] = &[
+    "NightcapCritterLiberation",
+    "NightcapCorporateRestructuring",
+    "NightcapWeedTheGarden",
+    "NightcapSteelPath",
+];
+
+const SPIDER_JOB_POOL: &[&str] = &[
+    "ProfitTakerPhase1",
+    "ProfitTakerPhase2",
+    "ProfitTakerPhase3",
+    "ProfitTakerPhase4",
+];
+
+pub(crate) fn plains_job_pool(tag: &str) -> &'static [&'static str] {
+    match tag {
+        "CetusSyndicate" => CETUS_JOB_POOL,
+        "SolarisSyndicate" => SOLARIS_JOB_POOL,
+        "EntratiSyndicate" => ENTRATI_JOB_POOL,
+        "NightcapSyndicate" => NIGHTCAP_JOB_POOL,
+        "ProfitTakerSyndicate" => SPIDER_JOB_POOL,
+        _ => &[],
+    }
+}
+
+/// 世界状态不公布轮换时，本地补上的赏金。
+pub struct StaticBountyJob {
+    pub id: &'static str,
+    pub title: &'static str,
+    pub kind: &'static str,
+    pub kind_zh: &'static str,
+    pub min_lv: i32,
+    pub max_lv: i32,
+    pub standing: i32,
+    pub steel: bool,
+    pub challenge: &'static str,
+    pub rewards: &'static [&'static str],
+}
+
+const NIGHTCAP_SHARED_REWARDS: &[&str] = &[
+    "Nokko 蓝图",
+    "铁离石",
+    "主要·霜冻",
+    "主要·毒侵",
+    "联结·电压",
+    "次要·妨害",
+    "次要·筑垒",
+];
+
+const NIGHTCAP_JOBS: &[StaticBountyJob] = &[
+    StaticBountyJob {
+        id: "NightcapCritterLiberation",
+        title: "解放小动物",
+        kind: "Deepmine",
+        kind_zh: "深矿",
+        min_lv: 30,
+        max_lv: 40,
+        standing: 1000,
+        steel: false,
+        challenge: "",
+        rewards: &[
+            "Nokko 机体蓝图",
+            "Nokko 蓝图",
+            "蕈菇蓝图",
+            "铁离石",
+        ],
+    },
+    StaticBountyJob {
+        id: "NightcapCorporateRestructuring",
+        title: "企业重组",
+        kind: "Deepmine",
+        kind_zh: "深矿",
+        min_lv: 30,
+        max_lv: 40,
+        standing: 1000,
+        steel: false,
+        challenge: "",
+        rewards: &[
+            "Nokko 系统蓝图",
+            "Nokko 蓝图",
+            "蕈菇蓝图",
+            "铁离石",
+        ],
+    },
+    StaticBountyJob {
+        id: "NightcapWeedTheGarden",
+        title: "花园除草",
+        kind: "Deepmine",
+        kind_zh: "深矿",
+        min_lv: 30,
+        max_lv: 40,
+        standing: 1000,
+        steel: false,
+        challenge: "",
+        rewards: &[
+            "Nokko 头部神经光元蓝图",
+            "Nokko 蓝图",
+            "蕈菇蓝图",
+            "铁离石",
+        ],
+    },
+    StaticBountyJob {
+        id: "NightcapSteelPath",
+        title: "钢铁之路",
+        kind: "Deepmine",
+        kind_zh: "深矿",
+        min_lv: 130,
+        max_lv: 140,
+        standing: 1000,
+        steel: true,
+        challenge: "每 2.5 小时在解放小动物、企业重组、花园除草里轮换。世界状态没有公布当前是哪一局。",
+        rewards: &[
+            "曲翼枪械赋能槽连接器",
+            "Nokko 蓝图",
+            "铁离石",
+        ],
+    },
+];
+
+const SPIDER_JOBS: &[StaticBountyJob] = &[
+    StaticBountyJob {
+        id: "ProfitTakerPhase1",
+        title: "阶段 1",
+        kind: "Heist",
+        kind_zh: "抢劫",
+        min_lv: 40,
+        max_lv: 60,
+        standing: 1000,
+        steel: false,
+        challenge: "",
+        rewards: &[
+            "5×陀螺磁抵系统",
+            "古纪 L8 遗物（光辉）",
+            "快速装填",
+            "5×大气系统",
+            "3×维加环型装置",
+            "古纪 A13 遗物（光辉）",
+            "3×斥极系统",
+            "致命效率",
+            "菌株 爆裂",
+        ],
+    },
+    StaticBountyJob {
+        id: "ProfitTakerPhase2",
+        title: "阶段 2",
+        kind: "Heist",
+        kind_zh: "抢劫",
+        min_lv: 40,
+        max_lv: 60,
+        standing: 1000,
+        steel: false,
+        challenge: "",
+        rewards: &[
+            "5×陀螺磁抵系统",
+            "古纪 C15 遗物（光辉）",
+            "坚决专注",
+            "5×大气系统",
+            "3×告达环型装置",
+            "前纪 Y2 遗物（光辉）",
+            "3×斥极系统",
+            "曲翼枪械行家",
+            "菌株 热毒",
+        ],
+    },
+    StaticBountyJob {
+        id: "ProfitTakerPhase3",
+        title: "阶段 3",
+        kind: "Heist",
+        kind_zh: "抢劫",
+        min_lv: 40,
+        max_lv: 60,
+        standing: 1000,
+        steel: false,
+        challenge: "重力磁抵器只在第一次完成时掉落。",
+        rewards: &[
+            "重力磁抵器",
+            "5×陀螺磁抵系统",
+            "前纪 D8 遗物（光辉）",
+            "标记目标",
+            "5×大气系统",
+            "3×索拉环型装置",
+            "中纪 C7 遗物（光辉）",
+            "3×斥极系统",
+            "覆壳弹药",
+            "菌株 感染",
+        ],
+    },
+    StaticBountyJob {
+        id: "ProfitTakerPhase4",
+        title: "阶段 4",
+        kind: "Heist",
+        kind_zh: "抢劫",
+        min_lv: 50,
+        max_lv: 60,
+        standing: 1000,
+        steel: false,
+        challenge: "",
+        rewards: &[
+            "5×陀螺磁抵系统",
+            "中纪 A16 遗物（光辉）",
+            "弹链",
+            "5×大气系统",
+            "后纪 S21 遗物（光辉）",
+            "3×斥极系统",
+            "关键焦点",
+            "菌株 吸收",
+        ],
+    },
+];
+
+pub fn static_bounty_jobs(tag: &str) -> &'static [StaticBountyJob] {
+    match tag {
+        "NightcapSyndicate" => NIGHTCAP_JOBS,
+        "ProfitTakerSyndicate" => SPIDER_JOBS,
+        _ => &[],
+    }
+}
+
+pub(crate) fn static_bounty_reward_labels(tag: &str) -> Option<Vec<String>> {
+    let jobs = static_bounty_jobs(tag);
+    if jobs.is_empty() {
+        return None;
+    }
+    let mut labels = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let shared: &[&str] = if tag == "NightcapSyndicate" {
+        NIGHTCAP_SHARED_REWARDS
+    } else {
+        &[]
+    };
+    for name in jobs.iter().flat_map(|j| j.rewards).chain(shared.iter()) {
+        if seen.insert(*name) {
+            labels.push((*name).to_string());
+        }
+    }
+    labels.sort();
+    Some(labels)
+}
+
+/// 已关注的任务 id 是否对上当前这一档。
+pub(crate) fn watch_job_matches(tag: &str, job_type: &str, title: &str, followed_id: &str) -> bool {
+    if is_cycle_watch_syndicate(tag) {
+        return cycle_node_title_zh(followed_id) == title;
+    }
+    let leaf = job_type.rsplit('/').next().unwrap_or(job_type);
+    if leaf == followed_id || leaf.strip_prefix("Venus") == Some(followed_id) {
+        return true;
+    }
+    // 同一赏金有多条路径（金星 Narmer 别名、钢路前缀）时按展示名对齐。
+    let followed_kind = job_kind_key(followed_id);
+    let followed_title = job_title_zh(followed_id, &followed_kind, 0, 0);
+    let bare = title
+        .strip_prefix("钢路·")
+        .or_else(|| title.strip_prefix("纳威·"))
+        .unwrap_or(title);
+    bare == followed_title || title == followed_title
 }
 
 /// challenge 路径 basename → 可执行说明（优先完整目标，避免「致命低语」这类不知所云的简称）。

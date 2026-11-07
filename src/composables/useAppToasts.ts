@@ -13,6 +13,8 @@ export interface AppToast {
   expiry: string | null;
   /** 势力 tag；有则点击可跳转对应声望页 */
   standingTag: string | null;
+  /** 点击打开裂隙页 */
+  openFissure: boolean;
   actions?: AppToastAction[];
 }
 
@@ -53,11 +55,17 @@ function scheduleExpiry(toast: AppToast) {
   );
 }
 
+export interface FissureAlertPayload {
+  body: string;
+  expiry: string | null;
+}
+
 export function pushToast(input: {
   title: string;
   body: string;
   expiry?: string | null;
   standingTag?: string | null;
+  openFissure?: boolean;
   actions?: AppToastAction[];
 }) {
   const id = `toast-${Date.now()}-${++seq}`;
@@ -67,6 +75,7 @@ export function pushToast(input: {
     body: input.body,
     expiry: input.expiry ?? null,
     standingTag: input.standingTag?.trim() || null,
+    openFissure: input.openFissure === true,
     actions: input.actions,
   };
   toasts.value = [...toasts.value, toast];
@@ -85,6 +94,17 @@ export function pushBountyAlerts(alerts: BountyAlertPayload[]) {
   }
 }
 
+export function pushFissureAlerts(alerts: FissureAlertPayload[]) {
+  for (const a of alerts) {
+    pushToast({
+      title: "裂隙",
+      body: a.body,
+      expiry: a.expiry,
+      openFissure: true,
+    });
+  }
+}
+
 export function dismissToast(id: string) {
   clearExpiryTimer(id);
   toasts.value = toasts.value.filter((t) => t.id !== id);
@@ -96,6 +116,7 @@ export function useAppToasts() {
     toasts: readonly(toasts),
     pushToast,
     pushBountyAlerts,
+    pushFissureAlerts,
     dismissToast,
   };
 }

@@ -68,13 +68,13 @@ pub fn part_meta(name: &str) -> Option<PartMeta> {
         "Chassis" => ("chassis", 2, "机体 Chassis"),
         "Systems" => ("systems", 3, "系统 Systems"),
         // Archwing
-        "Wings" => ("wings", 4, "双翼 Wings"),
+        "Wings" => ("wings", 4, "双翼"),
         // Necramech
-        "Engine" => ("engine", 4, "引擎 Engine"),
-        "Weapon Pod" => ("weapon_pod", 5, "武器舱 Weapon Pod"),
+        "Engine" => ("engine", 4, "引擎"),
+        "Weapon Pod" => ("weapon_pod", 5, "武器舱"),
         // Sentinel 守护
-        "Carapace" => ("carapace", 1, "外壳 Carapace"),
-        "Cerebrum" => ("cerebrum", 2, "大脑 Cerebrum"),
+        "Carapace" => ("carapace", 1, "外壳"),
+        "Cerebrum" => ("cerebrum", 2, "大脑"),
         "Day Aspect Blueprint" => ("day_blueprint", 10, "白昼面蓝图"),
         "Day Aspect Systems" => ("day_systems", 11, "白昼面系统"),
         "Day Aspect Chassis" => ("day_chassis", 12, "白昼面机体"),

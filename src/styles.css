@@ -478,6 +478,10 @@ textarea {
   color: var(--text-mute);
   font-size: 12px;
 }
+.wish-item .wish-clear {
+  flex-shrink: 0;
+  padding: 4px 8px;
+}
 
 .quick-filters {
   display: flex;
@@ -605,6 +609,17 @@ table.list tbody tr.selected {
 .name-cell .zh {
   color: var(--text-dim);
   margin-left: 6px;
+}
+.name-cell .wiki-name {
+  display: inline-flex;
+  align-items: baseline;
+  width: fit-content;
+  max-width: 100%;
+  cursor: pointer;
+}
+.name-cell .wiki-name:hover .en {
+  color: var(--cyan);
+  text-decoration: underline;
 }
 
 table.list select.list-status {

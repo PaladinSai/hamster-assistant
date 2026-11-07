@@ -37,6 +37,8 @@ export type StandingSection =
   | "solaris"
   | "ventkids"
   | "vox"
+  | "nightcap"
+  | "spider"
   | "entrati"
   | "necraloid"
   | "holdfasts"
@@ -54,6 +56,8 @@ export const STANDING_SECTION_TAG: Record<
   solaris: "SolarisSyndicate",
   ventkids: "VentKidsSyndicate",
   vox: "VoxSyndicate",
+  nightcap: "NightcapSyndicate",
+  spider: "ProfitTakerSyndicate",
   entrati: "EntratiSyndicate",
   necraloid: "NecraloidSyndicate",
   holdfasts: "ZarimanSyndicate",
@@ -71,6 +75,8 @@ export const STANDING_NAV_ITEMS: {
   { section: "solaris", label: "索拉里斯联盟" },
   { section: "ventkids", label: "通风小子" },
   { section: "vox", label: "索拉里斯之声" },
+  { section: "nightcap", label: "夜帽" },
+  { section: "spider", label: "大蜘蛛" },
   { section: "entrati", label: "英择谛" },
   { section: "necraloid", label: "殁世械灵" },
   { section: "holdfasts", label: "坚守者" },
@@ -134,6 +140,8 @@ const STANDING_SECTION_TITLE: Record<StandingSection, string> = {
   solaris: "索拉里斯联盟",
   ventkids: "通风小子",
   vox: "索拉里斯之声",
+  nightcap: "夜帽",
+  spider: "大蜘蛛",
   entrati: "英择谛",
   necraloid: "殁世械灵",
   holdfasts: "坚守者",
@@ -143,12 +151,14 @@ const STANDING_SECTION_TITLE: Record<StandingSection, string> = {
 };
 
 const STANDING_SECTION_HINT: Record<StandingSection, string> = {
-  overview: "开放世界赏金 · 关注高级档提醒",
+  overview: "开放世界赏金 · 关注任务、掉落或挑战",
   ostron: "希图斯赏金板",
   quills: "无日常赏金",
   solaris: "福尔图娜赏金板",
   ventkids: "无日常赏金",
   vox: "无日常赏金",
+  nightcap: "深矿赏金 · 三局常驻，钢铁之路每 2.5 小时轮换",
+  spider: "利润收割者圆蛛 · 四个阶段，各有掉落",
   entrati: "火卫二赏金板",
   necraloid: "无日常赏金",
   holdfasts: "扎里曼赏金板",
@@ -203,7 +213,7 @@ export function useAppNav(opts: {
       return "来源 · 品类 · 品级 · 未获取/未满级/已获取 · 还差几个";
     if (view.value === "archwing") return "双翼 / 系统 / 掌握 / 心愿";
     if (view.value === "necramechs") return "引擎 / 武器舱 / 掌握 / 心愿";
-    return "本体 / Prime / Helminth / 入库 / 已挖";
+    return "全部 / 普通 / Prime / 待喂 · 进度 · 入库";
   });
 
   const showTopbarCatalogTools = computed(

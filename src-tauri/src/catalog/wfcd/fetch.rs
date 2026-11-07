@@ -1,4 +1,4 @@
-//! HTTP 拉取（多 URL 回退 + ETag）。
+//! HTTP 拉取（单一上游 + ETag）。失败即返回，不换源。
 
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -28,54 +28,36 @@ fn shared_client() -> &'static Client {
     })
 }
 
-pub fn fetch_archwings(
-    urls: &[&str],
-    prev_etag: Option<&str>,
-) -> Result<FetchResult, String> {
-    fetch_warframes(urls, prev_etag)
+pub fn fetch_archwings(url: &str, prev_etag: Option<&str>) -> Result<FetchResult, String> {
+    fetch_warframes(url, prev_etag)
 }
 
-pub fn fetch_sentinels(
-    urls: &[&str],
-    prev_etag: Option<&str>,
-) -> Result<FetchResult, String> {
-    fetch_warframes(urls, prev_etag)
+pub fn fetch_sentinels(url: &str, prev_etag: Option<&str>) -> Result<FetchResult, String> {
+    fetch_warframes(url, prev_etag)
 }
 
-pub fn fetch_pets(
-    urls: &[&str],
-    prev_etag: Option<&str>,
-) -> Result<FetchResult, String> {
-    fetch_warframes(urls, prev_etag)
+pub fn fetch_pets(url: &str, prev_etag: Option<&str>) -> Result<FetchResult, String> {
+    fetch_warframes(url, prev_etag)
 }
 
-pub fn fetch_warframes(
-    urls: &[&str],
-    if_none_match: Option<&str>,
-) -> Result<FetchResult, String> {
-    fetch_json_urls(urls, if_none_match, 60)
+pub fn fetch_warframes(url: &str, if_none_match: Option<&str>) -> Result<FetchResult, String> {
+    fetch_json_url(url, if_none_match, 60)
 }
 
-/// 通用 JSON 拉取（多 URL 回退）。共用 Client 连接池；`timeout_secs` 作用于单次请求。
-pub fn fetch_json_urls(
-    urls: &[&str],
+/// 通用 JSON 拉取。共用 Client 连接池；`timeout_secs` 作用于这一次请求。
+/// 网络错误、超时、非 2xx 直接失败，不尝试其他地址。
+pub fn fetch_json_url(
+    url: &str,
     if_none_match: Option<&str>,
     timeout_secs: u64,
 ) -> Result<FetchResult, String> {
     let client = shared_client();
     let timeout = Duration::from_secs(timeout_secs.max(1));
-
-    let mut last_err = String::from("无可用上游 URL");
-    for url in urls {
-        match fetch_one(client, url, if_none_match, timeout) {
-            Ok(r) => return Ok(r),
-            Err(e) => {
-                last_err = format!("{url}: {e}");
-                eprintln!("[仓鼠] 拉取失败，尝试下一源: {last_err}");
-            }
-        }
-    }
-    Err(last_err)
+    fetch_one(client, url, if_none_match, timeout).map_err(|e| {
+        let msg = format!("{url}: {e}");
+        eprintln!("[仓鼠] 拉取失败，已取消后续更新: {msg}");
+        msg
+    })
 }
 
 fn fetch_one(

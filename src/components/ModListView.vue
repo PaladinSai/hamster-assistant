@@ -423,17 +423,17 @@ function confirmAddTag() {
               >★</span
             >
           </td>
-          <td
-            class="name-cell mod-wiki-name"
-            title="打开灰机 Wiki"
-            @click="openWiki(m, $event)"
-          >
-            <span class="en">{{ displayName(m) }}</span>
+          <td class="name-cell">
             <span
-              v-if="m.nameZh && m.nameZh !== m.nameEn"
-              class="zh"
-              >{{ m.nameEn }}</span
+              class="wiki-name"
+              title="打开灰机 Wiki"
+              @click="openWiki(m, $event)"
             >
+              <span class="en">{{ displayName(m) }}</span>
+              <span v-if="m.nameZh && m.nameZh !== m.nameEn" class="zh">{{
+                m.nameEn
+              }}</span>
+            </span>
           </td>
           <td @click.stop>
             <select
@@ -525,13 +525,6 @@ function confirmAddTag() {
 </template>
 
 <style scoped>
-.mod-wiki-name {
-  cursor: pointer;
-}
-.mod-wiki-name:hover .en {
-  color: var(--cyan);
-  text-decoration: underline;
-}
 .add-tag {
   min-width: 28px;
   font-weight: 600;

@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS warframe_part (
   part_key    TEXT    NOT NULL,
   name_zh     TEXT    NOT NULL,
   sort_order  INTEGER NOT NULL DEFAULT 0,
+  unique_name TEXT,
   UNIQUE (warframe_id, part_key)
 );
 
@@ -173,12 +174,13 @@ CREATE INDEX IF NOT EXISTS idx_weapon_family ON weapon(family_id);
 CREATE INDEX IF NOT EXISTS idx_weapon_unique ON weapon(unique_name);
 
 CREATE TABLE IF NOT EXISTS weapon_part (
-  id         INTEGER NOT NULL PRIMARY KEY,
-  weapon_id  INTEGER NOT NULL REFERENCES weapon(id),
-  part_key   TEXT    NOT NULL,
-  name_zh    TEXT    NOT NULL,
-  need_qty   INTEGER NOT NULL DEFAULT 1,
-  sort_order INTEGER NOT NULL DEFAULT 0,
+  id          INTEGER NOT NULL PRIMARY KEY,
+  weapon_id   INTEGER NOT NULL REFERENCES weapon(id),
+  part_key    TEXT    NOT NULL,
+  name_zh     TEXT    NOT NULL,
+  need_qty    INTEGER NOT NULL DEFAULT 1,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  unique_name TEXT,
   UNIQUE (weapon_id, part_key)
 );
 

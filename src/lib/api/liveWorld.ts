@@ -178,6 +178,30 @@ export function getFissureBrief() {
   return invoke<FissureBriefDto>("get_fissure_brief_cmd");
 }
 
+export interface FissureWatchTarget {
+  kind: string;
+  tier: string;
+  missionType: string;
+}
+
+export interface FissureWatchPrefs {
+  targets: FissureWatchTarget[];
+  lastNotified: string[];
+}
+
+export interface FissureWatchView {
+  prefs: FissureWatchPrefs;
+  missionTypes: string[];
+}
+
+export function getFissureWatch() {
+  return invoke<FissureWatchView>("get_fissure_watch_cmd");
+}
+
+export function setFissureWatch(prefs: FissureWatchPrefs) {
+  return invoke<FissureWatchPrefs>("set_fissure_watch_cmd", { prefs });
+}
+
 export interface ArbitrationSlotDto {
   activation: string;
   expiry: string;

@@ -41,6 +41,10 @@ export function useCatalogUpdates(opts: { error: Ref<string> }) {
   /** 供 AppShell 监听 backend://update-finished */
   function onBackendUpdateFinished(msg: string) {
     finishUpdate(msg);
+    if (msg.includes("失败")) {
+      opts.error.value = msg;
+      updateMsg.value = "";
+    }
   }
 
   async function kick(

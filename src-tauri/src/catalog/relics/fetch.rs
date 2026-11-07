@@ -1,69 +1,23 @@
-//! Relics.json 拉取。
+//! Relics.json 拉取。只请求一个代理地址；奖励为空则视为失败，避免清空已有掉落。
 
-use reqwest::blocking::Client;
-use reqwest::header::{ETAG, IF_NONE_MATCH};
-use reqwest::StatusCode;
+use crate::catalog::wfcd::{fetch_json_url, FetchResult};
 
-use crate::catalog::wfcd::FetchResult;
+use super::parse::parse_intact_relics;
 
-pub fn fetch_relics(urls: &[&str], if_none_match: Option<&str>) -> Result<FetchResult, String> {
-    let client = Client::builder()
-        .user_agent("cangshu-assistant/0.1 (Warframe catalog sync; +https://github.com/)")
-        .timeout(std::time::Duration::from_secs(90))
-        .build()
-        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
-
-    let mut last_err = String::from("无可用上游 URL");
-    for url in urls {
-        match fetch_one(&client, url, if_none_match) {
-            Ok(r) => return Ok(r),
-            Err(e) => {
-                last_err = format!("{url}: {e}");
-                eprintln!("[仓鼠] 遗物拉取失败，尝试下一源: {last_err}");
-            }
-        }
+pub fn fetch_relics(url: &str, if_none_match: Option<&str>) -> Result<FetchResult, String> {
+    let fetched = fetch_json_url(url, if_none_match, 90)?;
+    if !fetched.not_modified {
+        reject_empty_intact_rewards(&fetched.body)?;
     }
-    Err(last_err)
+    Ok(fetched)
 }
 
-pub(crate) fn fetch_one(
-    client: &Client,
-    url: &str,
-    if_none_match: Option<&str>,
-) -> Result<FetchResult, String> {
-    let mut req = client.get(url);
-    if let Some(etag) = if_none_match {
-        if !etag.is_empty() {
-            req = req.header(IF_NONE_MATCH, etag);
-        }
+/// Intact 遗物存在但奖励条数为 0：正文不可用，调用方不得导入。
+pub(crate) fn reject_empty_intact_rewards(body: &[u8]) -> Result<(), String> {
+    let relics = parse_intact_relics(body)?;
+    let rewards: usize = relics.iter().map(|r| r.all_rewards.len()).sum();
+    if !relics.is_empty() && rewards == 0 {
+        return Err("遗物正文没有 Intact 奖励，已取消导入并保留旧数据".into());
     }
-    let resp = req.send().map_err(|e| format!("请求失败: {e}"))?;
-    let status = resp.status();
-    let etag = resp
-        .headers()
-        .get(ETAG)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-
-    if status == StatusCode::NOT_MODIFIED {
-        return Ok(FetchResult {
-            body: Vec::new(),
-            etag,
-            url: url.to_string(),
-            not_modified: true,
-        });
-    }
-    if !status.is_success() {
-        return Err(format!("HTTP {status}"));
-    }
-    let body = resp
-        .bytes()
-        .map_err(|e| format!("读响应失败: {e}"))?
-        .to_vec();
-    Ok(FetchResult {
-        body,
-        etag,
-        url: url.to_string(),
-        not_modified: false,
-    })
+    Ok(())
 }

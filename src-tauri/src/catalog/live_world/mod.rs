@@ -7,11 +7,13 @@ mod bounty_watch;
 mod challenge_i18n;
 mod conquest_i18n;
 mod fetch;
+mod fissure_watch;
 mod localize;
 mod localize_bounty;
 mod localize_weekly;
 mod parse;
 mod plains;
+mod reward_inventory;
 mod shop;
 mod standing_daily;
 mod standing_ranks;
@@ -31,14 +33,18 @@ use crate::id::Snowflake;
 
 pub use arbitration::{get_arbitration_brief, ArbitrationBriefDto};
 pub use bounty_watch::{get_bounty_watch, match_and_record_notifications, set_bounty_watch};
+pub use fissure_watch::{
+    get_fissure_watch, match_and_record_fissure_notifications, set_fissure_watch,
+};
 pub use plains::{get_plains_brief, PlainsBriefDto};
 pub use shop::{get_weekly_shop_brief, WeeklyShopBrief};
 pub use standing_daily::{get_standing_daily, set_standing_daily};
 pub use standing_ranks::{get_standing_ranks, set_standing_ranks};
 pub use summary::{get_bounty_brief, get_fissure_brief, get_live_daily_brief};
 pub use types::{
-    BountyAlertDto, BountyBriefApi, BountyWatchPrefs, FissureBriefDto, LiveDailyBrief,
-    LiveWorldOutcome, StandingDailyPrefs, StandingRanksPrefs,
+    BountyAlertDto, BountyBriefApi, BountyWatchPrefs, BountyWatchView, FissureAlertDto,
+    FissureBriefDto, FissureWatchPrefs, FissureWatchTarget, FissureWatchView,
+    LiveDailyBrief, LiveWorldOutcome, StandingDailyPrefs, StandingRanksPrefs,
 };
 
 use apply::{apply_live_fetch_scoped, ApplyScope};

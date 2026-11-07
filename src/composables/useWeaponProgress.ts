@@ -22,7 +22,7 @@ export function useWeaponProgress(opts: {
   loadArchwingWeaponFamilies: () => Promise<void>;
   view: Ref<View>;
 }) {
-  const weaponSlot = ref(0);
+  const weaponSlot = ref(-1);
   const archwingWeaponSlot = ref(-1);
   const weaponKindFilter = ref<WeaponKindFilter>("all");
   const weaponProgressFilter = ref<WeaponProgressFilter>("all");

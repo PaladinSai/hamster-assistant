@@ -4,7 +4,11 @@
  * AppShell 按 view 选 mode + families，不再复制四段模板。
  */
 import type { WarframeListItem } from "../lib/api";
-import type { FilterKey, WarframeStatusFilter } from "../lib/status";
+import type {
+  FilterKey,
+  WarframeStatusFilter,
+  WarframeVaultFilter,
+} from "../lib/status";
 import type { CompanionTypeFilter } from "../composables/useWarframeProgress";
 import WarframeListView from "./WarframeListView.vue";
 
@@ -13,6 +17,7 @@ defineProps<{
   families: WarframeListItem[];
   filter: FilterKey;
   statusFilter: WarframeStatusFilter;
+  vaultFilter: WarframeVaultFilter;
   companionTypeFilter: CompanionTypeFilter;
   query: string;
   selectedId: string | null;
@@ -23,10 +28,10 @@ defineProps<{
 defineEmits<{
   "update:filter": [value: FilterKey];
   "update:statusFilter": [value: WarframeStatusFilter];
+  "update:vaultFilter": [value: WarframeVaultFilter];
   "update:companionTypeFilter": [value: CompanionTypeFilter];
   select: [warframeId: string];
   toggleHelminth: [item: WarframeListItem];
-  toggleForma: [item: WarframeListItem];
   toggleMastered: [item: WarframeListItem];
   toggleWish: [item: WarframeListItem];
   updateStatus: [warframeId: string, status: number];
@@ -41,6 +46,7 @@ defineEmits<{
     :families="families"
     :filter="filter"
     :status-filter="statusFilter"
+    :vault-filter="vaultFilter"
     :companion-type-filter="companionTypeFilter"
     :query="query"
     :selected-id="selectedId"
@@ -48,10 +54,10 @@ defineEmits<{
     :marking-all="markingAll"
     @update:filter="$emit('update:filter', $event)"
     @update:status-filter="$emit('update:statusFilter', $event)"
+    @update:vault-filter="$emit('update:vaultFilter', $event)"
     @update:companion-type-filter="$emit('update:companionTypeFilter', $event)"
     @select="$emit('select', $event)"
     @toggle-helminth="$emit('toggleHelminth', $event)"
-    @toggle-forma="$emit('toggleForma', $event)"
     @toggle-mastered="$emit('toggleMastered', $event)"
     @toggle-wish="$emit('toggleWish', $event)"
     @update-status="(id, status) => $emit('updateStatus', id, status)"

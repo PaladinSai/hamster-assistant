@@ -14,7 +14,7 @@ use rusqlite::Connection;
 use crate::db::{has_column, has_table, read_user_version};
 
 /// 与 [`crate::db`] 导出保持一致。
-pub const CATALOG_SCHEMA_VERSION: i32 = 22;
+pub const CATALOG_SCHEMA_VERSION: i32 = 24;
 
 const CATALOG_SEED_SQL: &str = include_str!("../sql/catalog_v1.sql");
 
@@ -43,6 +43,8 @@ pub fn migrate_catalog_conn(conn: &Connection) -> Result<(), String> {
             20 => migrate_catalog_to_v20(conn)?,
             21 => migrate_catalog_to_v21(conn)?,
             22 => migrate_catalog_to_v22(conn)?,
+            23 => migrate_catalog_to_v23(conn)?,
+            24 => migrate_catalog_to_v24(conn)?,
             n => {
                 return Err(format!(
                     "缺少 catalog 迁移步骤 → v{n}（程序目标 {CATALOG_SCHEMA_VERSION}）"
@@ -288,6 +290,42 @@ fn migrate_catalog_to_v22(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
+/// v22 → v23：武器部件记下配方 `uniqueName`，用来和遗物奖励对齐。
+fn migrate_catalog_to_v23(conn: &Connection) -> Result<(), String> {
+    if has_table(conn, "weapon_part") && !has_column(conn, "weapon_part", "unique_name") {
+        conn.execute(
+            "ALTER TABLE weapon_part ADD COLUMN unique_name TEXT",
+            [],
+        )
+        .map_err(|e| format!("weapon_part 增加 unique_name 失败: {e}"))?;
+    }
+    if has_table(conn, "weapon_part") {
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_weapon_part_unique ON weapon_part(unique_name);",
+        )
+        .map_err(|e| format!("创建 idx_weapon_part_unique 失败: {e}"))?;
+    }
+    Ok(())
+}
+
+/// v23 → v24：机体部件记下配方路径，Archwing / 同伴才能和遗物对齐。
+fn migrate_catalog_to_v24(conn: &Connection) -> Result<(), String> {
+    if has_table(conn, "warframe_part") && !has_column(conn, "warframe_part", "unique_name") {
+        conn.execute(
+            "ALTER TABLE warframe_part ADD COLUMN unique_name TEXT",
+            [],
+        )
+        .map_err(|e| format!("warframe_part 增加 unique_name 失败: {e}"))?;
+    }
+    if has_table(conn, "warframe_part") {
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_warframe_part_unique ON warframe_part(unique_name);",
+        )
+        .map_err(|e| format!("创建 idx_warframe_part_unique 失败: {e}"))?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,6 +362,8 @@ mod tests {
         assert!(has_table(&conn, "weapon_family"));
         assert!(has_column(&conn, "weapon_family", "modular_kind"));
         assert!(has_table(&conn, "live_fissure"));
+        assert!(has_column(&conn, "weapon_part", "unique_name"));
+        assert!(has_column(&conn, "warframe_part", "unique_name"));
     }
 
     #[test]
@@ -353,6 +393,26 @@ mod tests {
         assert_eq!(read_user_version(&conn).unwrap(), CATALOG_SCHEMA_VERSION);
         assert!(has_column(&conn, "live_steel_incursion", "today_json"));
         assert!(has_table(&conn, "live_fissure"));
+    }
+
+    #[test]
+    fn migrate_v22_to_v23_adds_weapon_part_unique() {
+        let (_hold, conn) = open_temp();
+        conn.execute_batch(
+            "CREATE TABLE weapon_part (
+               id INTEGER PRIMARY KEY,
+               weapon_id INTEGER NOT NULL,
+               part_key TEXT NOT NULL,
+               name_zh TEXT NOT NULL,
+               need_qty INTEGER NOT NULL DEFAULT 1,
+               sort_order INTEGER NOT NULL DEFAULT 0
+             );",
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 22).unwrap();
+        migrate_catalog_conn(&conn).unwrap();
+        assert_eq!(read_user_version(&conn).unwrap(), CATALOG_SCHEMA_VERSION);
+        assert!(has_column(&conn, "weapon_part", "unique_name"));
     }
 
     #[test]

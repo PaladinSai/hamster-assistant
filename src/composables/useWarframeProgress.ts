@@ -6,7 +6,11 @@ import {
   type WarframeDetail,
   type WarframeListItem,
 } from "../lib/api";
-import type { FilterKey, WarframeStatusFilter } from "../lib/status";
+import type {
+  FilterKey,
+  WarframeStatusFilter,
+  WarframeVaultFilter,
+} from "../lib/status";
 import { nextWish } from "../lib/wish";
 import type { CompanionType } from "../lib/api/warframes";
 import type { View } from "./useAppNav";
@@ -20,6 +24,7 @@ export function useWarframeProgress(opts: {
 }) {
   const filter = ref<FilterKey>("all");
   const statusFilter = ref<WarframeStatusFilter>("all");
+  const vaultFilter = ref<WarframeVaultFilter>("all");
   const companionTypeFilter = ref<CompanionTypeFilter>("all");
   const selectedId = ref<string | null>(null);
   const detail = ref<WarframeDetail | null>(null);
@@ -74,12 +79,6 @@ export function useWarframeProgress(opts: {
     const next = f.helminth ? 0 : 1;
     patchLocal(f.warframeId, { helminth: next });
     await upsertProgressWarframe({ warframeId: f.warframeId, helminth: next });
-  }
-
-  async function toggleForma(f: WarframeListItem) {
-    const next = f.formaDone ? 0 : 1;
-    patchLocal(f.warframeId, { formaDone: next });
-    await upsertProgressWarframe({ warframeId: f.warframeId, formaDone: next });
   }
 
   async function toggleMastered(f: WarframeListItem) {
@@ -159,11 +158,6 @@ export function useWarframeProgress(opts: {
     await toggleHelminth(detail.value.warframe);
   }
 
-  async function toggleFormaFromDrawer() {
-    if (!detail.value) return;
-    await toggleForma(detail.value.warframe);
-  }
-
   async function toggleMasteredFromDrawer() {
     if (!detail.value) return;
     await toggleMastered(detail.value.warframe);
@@ -194,6 +188,7 @@ export function useWarframeProgress(opts: {
   return {
     filter,
     statusFilter,
+    vaultFilter,
     companionTypeFilter,
     selectedId,
     detail,
@@ -202,7 +197,6 @@ export function useWarframeProgress(opts: {
     closeDrawer,
     openWarframe,
     toggleHelminth,
-    toggleForma,
     toggleMastered,
     updateStatus,
     updateStatusFromDrawer,
@@ -212,7 +206,6 @@ export function useWarframeProgress(opts: {
     toggleWish,
     toggleWishFromDrawer,
     toggleHelminthFromDrawer,
-    toggleFormaFromDrawer,
     toggleMasteredFromDrawer,
     markAllOwned,
   };

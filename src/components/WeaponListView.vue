@@ -262,7 +262,10 @@ async function onMarkAllOwned() {
 }
 
 function canOpenDrawer(m: WeaponMemberDto) {
-  return (m.partCount ?? 0) > 1;
+  const n = m.partCount ?? 0;
+  // 空战武器经常只有一张蓝图，也要能点开看部件。
+  if (props.mode === "archwing") return n >= 1;
+  return n > 1;
 }
 
 function displayZh(f: WeaponFamilyListItem, m: WeaponMemberDto) {
@@ -489,24 +492,26 @@ function onNoteBlur(m: WeaponMemberDto) {
               >★</span
             >
           </td>
-          <td
-            class="name-cell wep-name wep-wiki-name"
-            title="打开灰机 Wiki"
-            @click="openWiki(row.family, row.member, $event)"
-          >
-            <span class="en">{{ displayZh(row.family, row.member) }}</span>
+          <td class="name-cell wep-name">
             <span
-              v-if="
-                displayEn(row.family, row.member) &&
-                displayEn(row.family, row.member) !==
-                  displayZh(row.family, row.member)
-              "
-              class="zh"
-              >{{ displayEn(row.family, row.member) }}</span
+              class="wiki-name"
+              title="打开灰机 Wiki"
+              @click="openWiki(row.family, row.member, $event)"
             >
-            <span v-else-if="nick(row.family)" class="zh">{{
-              nick(row.family)
-            }}</span>
+              <span class="en">{{ displayZh(row.family, row.member) }}</span>
+              <span
+                v-if="
+                  displayEn(row.family, row.member) &&
+                  displayEn(row.family, row.member) !==
+                    displayZh(row.family, row.member)
+                "
+                class="zh"
+                >{{ displayEn(row.family, row.member) }}</span
+              >
+              <span v-else-if="nick(row.family)" class="zh">{{
+                nick(row.family)
+              }}</span>
+            </span>
           </td>
           <td>
             <span
@@ -614,16 +619,14 @@ function onNoteBlur(m: WeaponMemberDto) {
 .wep-name {
   max-width: 160px;
 }
-.wep-wiki-name {
-  cursor: pointer;
-}
-.wep-wiki-name:hover .en {
-  color: var(--cyan);
-  text-decoration: underline;
+.wep-name .wiki-name {
+  flex-direction: column;
+  align-items: flex-start;
 }
 .wep-name .en,
 .wep-name .zh {
   display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

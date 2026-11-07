@@ -394,17 +394,17 @@ function copiesLabel(a: ArcaneListItem) {
               >★</span
             >
           </td>
-          <td
-            class="name-cell arcane-wiki-name"
-            title="打开灰机 Wiki"
-            @click="openWiki(a, $event)"
-          >
-            <span class="en">{{ displayName(a) }}</span>
+          <td class="name-cell">
             <span
-              v-if="a.nameZh && a.nameZh !== a.nameEn"
-              class="zh"
-              >{{ a.nameEn }}</span
+              class="wiki-name"
+              title="打开灰机 Wiki"
+              @click="openWiki(a, $event)"
             >
+              <span class="en">{{ displayName(a) }}</span>
+              <span v-if="a.nameZh && a.nameZh !== a.nameEn" class="zh">{{
+                a.nameEn
+              }}</span>
+            </span>
           </td>
           <td>
             <span class="note" style="max-width: none">{{
@@ -513,12 +513,5 @@ function copiesLabel(a: ArcaneListItem) {
 }
 .focus-clear:hover {
   border-color: var(--accent);
-}
-.arcane-wiki-name {
-  cursor: pointer;
-}
-.arcane-wiki-name:hover .en {
-  color: var(--cyan);
-  text-decoration: underline;
 }
 </style>

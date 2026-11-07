@@ -20,7 +20,11 @@ import {
   type BountyWatchPrefs,
   type StandingDailyPrefs,
   type StandingRanksPrefs,
+  type SyndicateWatch,
+  type SyndicateWatchCatalog,
+  type WatchChoice,
 } from "../lib/api";
+import { statusPillKind } from "../lib/status";
 import LiveRemain from "./routine/LiveRemain.vue";
 
 const props = defineProps<{
@@ -39,10 +43,19 @@ const refreshTokenRef = toRef(props, "refreshToken");
 const { brief, reload: reloadBounty } = useBountyCache(refreshTokenRef);
 
 const watchPrefs = ref<BountyWatchPrefs>({
-  followedSyndicates: [],
-  followedJobKinds: [],
+  watches: [],
   lastNotified: [],
 });
+const watchCatalog = ref<SyndicateWatchCatalog[]>([]);
+const selectedTag = ref("");
+const rewardQuery = ref("");
+const challengeQuery = ref("");
+
+const CYCLE_WATCH_TAGS = new Set([
+  "ZarimanSyndicate",
+  "EntratiLabSyndicate",
+  "HexSyndicate",
+]);
 const ranksPrefs = ref<StandingRanksPrefs>({ ranks: {} });
 const dailyPrefs = ref<StandingDailyPrefs>({
   dayKey: "",
@@ -70,7 +83,14 @@ async function loadPrefs() {
       getStandingRanks(),
       getStandingDaily(),
     ]);
-    watchPrefs.value = w;
+    watchPrefs.value = w.prefs;
+    watchCatalog.value = w.catalog;
+    if (
+      !selectedTag.value ||
+      !w.catalog.some((c) => c.tag === selectedTag.value)
+    ) {
+      selectedTag.value = w.catalog[0]?.tag ?? "";
+    }
     ranksPrefs.value = r;
     dailyPrefs.value = d;
     emit("ranksUpdated", r);
@@ -142,71 +162,71 @@ const visibleCards = computed((): StandingCard[] => {
   });
 });
 
-const knownKinds = computed(() => {
-  const map = new Map<string, string>();
-  for (const b of boards.value) {
-    for (const j of b.jobs) {
-      const zh = j.kindZh && j.kindZh !== j.kind ? j.kindZh : translateKindFallback(j.kind);
-      if (!map.has(j.kind)) map.set(j.kind, zh);
+const selectedCatalog = computed(
+  () => watchCatalog.value.find((c) => c.tag === selectedTag.value) ?? null,
+);
+
+const selectedWatch = computed((): SyndicateWatch => {
+  return (
+    watchPrefs.value.watches.find((w) => w.tag === selectedTag.value) ?? {
+      tag: selectedTag.value,
+      jobs: [],
+      rewards: [],
+      challenges: [],
     }
-  }
-  return [...map.entries()]
-    .map(([kind, kindZh]) => ({ kind, kindZh }))
-    .sort((a, b) => {
-      // 歼灭优先（坚守者 / 六人组 / 科维兽关注主用途）
-      if (a.kind === "Exterminate") return -1;
-      if (b.kind === "Exterminate") return 1;
-      return a.kindZh.localeCompare(b.kindZh, "zh");
-    });
+  );
 });
 
-function translateKindFallback(kind: string) {
-  const table: Record<string, string> = {
-    Exterminate: "歼灭",
-    Survival: "生存",
-    Defense: "防御",
-    MobileDefense: "移动防御",
-    DualDefense: "镜像防御",
-    Assassinate: "刺杀",
-    Capture: "捕获",
-    Attrition: "消耗",
-    Cull: "清剿",
-    Helping: "援助",
-    Legacyte: "传承种收割",
-    Alchemy: "元素转换",
-    Disruption: "中断",
-    VoidFlood: "虚空洪流",
-    VoidCascade: "虚空覆涌",
-    VoidArmageddon: "虚空决战",
-    Hazards: "高危物品",
-    HighKill: "天降正义",
-    DestroyProps: "摧毁掩护",
-    Exploding: "爆炸性科腐者",
-    SafeCracker: "破壳专家",
-    Operator: "脱离战甲",
-    Collect: "收集",
-    Vial: "化学课",
-    Doppelganger: "致命低语",
-    Decoration: "破坏能手",
-    Conduit: "坚毅爆破者",
-  };
-  return table[kind] ?? kind;
+function watchCount(tag: string) {
+  const row = watchPrefs.value.watches.find((w) => w.tag === tag);
+  if (!row) return 0;
+  return row.jobs.length + row.rewards.length + row.challenges.length;
 }
 
 const watchSummary = computed(() => {
-  const nSyn = watchPrefs.value.followedSyndicates.length;
-  const nKind = watchPrefs.value.followedJobKinds.length;
-  if (nSyn === 0 && nKind === 0) return "未设置关注";
-  return `已关注 ${nSyn} 个势力 · ${nKind} 种任务`;
+  const n = watchCatalog.value.filter((c) => watchCount(c.tag) > 0).length;
+  if (n === 0) return "未设置关注";
+  return `已关注 ${n} 个势力`;
 });
 
-function isFollowedSyndicate(tag: string) {
-  return watchPrefs.value.followedSyndicates.includes(tag);
+function isChosen(field: "jobs" | "rewards" | "challenges", id: string) {
+  return selectedWatch.value[field].includes(id);
 }
 
-function isFollowedKind(kind: string) {
-  return watchPrefs.value.followedJobKinds.includes(kind);
+function matchesQuery(choices: WatchChoice[], query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return choices
+    .filter((c) => c.label.toLowerCase().includes(q))
+    .slice(0, 40);
 }
+
+const rewardHits = computed(() =>
+  matchesQuery(selectedCatalog.value?.rewards ?? [], rewardQuery.value),
+);
+const challengeHits = computed(() =>
+  matchesQuery(selectedCatalog.value?.challenges ?? [], challengeQuery.value),
+);
+
+function rewardChoice(id: string): WatchChoice {
+  return (
+    selectedCatalog.value?.rewards.find((choice) => choice.id === id) ?? {
+      id,
+      label: id,
+    }
+  );
+}
+
+const pickedRewards = computed(() =>
+  selectedWatch.value.rewards.map((id) => rewardChoice(id)),
+);
+
+function rewardMark(label: string) {
+  return brief.value?.rewardMarks?.[label] ?? "";
+}
+const pickedChallenges = computed(() =>
+  selectedWatch.value.challenges.map((id) => ({ id, label: id })),
+);
 
 async function persistWatch(next: BountyWatchPrefs) {
   saving.value = true;
@@ -220,23 +240,39 @@ async function persistWatch(next: BountyWatchPrefs) {
   }
 }
 
-async function toggleSyndicate(tag: string) {
-  const set = new Set(watchPrefs.value.followedSyndicates);
-  if (set.has(tag)) set.delete(tag);
-  else set.add(tag);
-  await persistWatch({
-    ...watchPrefs.value,
-    followedSyndicates: [...set],
-  });
+function selectSyndicate(tag: string) {
+  selectedTag.value = tag;
+  rewardQuery.value = "";
+  challengeQuery.value = "";
+  watchOpen.value = true;
 }
 
-async function toggleKind(kind: string) {
-  const set = new Set(watchPrefs.value.followedJobKinds);
-  if (set.has(kind)) set.delete(kind);
-  else set.add(kind);
+async function toggleChoice(
+  field: "jobs" | "rewards" | "challenges",
+  id: string,
+) {
+  const tag = selectedTag.value;
+  if (!tag) return;
+  const watches = watchPrefs.value.watches.map((w) => ({
+    tag: w.tag,
+    jobs: [...w.jobs],
+    rewards: [...w.rewards],
+    challenges: [...w.challenges],
+  }));
+  let row = watches.find((w) => w.tag === tag);
+  if (!row) {
+    row = { tag, jobs: [], rewards: [], challenges: [] };
+    watches.push(row);
+  }
+  const list = row[field];
+  const at = list.indexOf(id);
+  if (at >= 0) list.splice(at, 1);
+  else list.push(id);
   await persistWatch({
-    ...watchPrefs.value,
-    followedJobKinds: [...set],
+    watches: watches.filter(
+      (w) => w.jobs.length || w.rewards.length || w.challenges.length,
+    ),
+    lastNotified: watchPrefs.value.lastNotified,
   });
 }
 
@@ -359,41 +395,156 @@ function standingLabel(
       </button>
       <div v-show="watchOpen" class="standing-watch-body">
         <p class="standing-hint">
-          关注势力 + 任务种类后，刷新数据时若该势力「声望最高」档命中种类，将弹出系统通知。
+          先选势力，再勾它的任务或掉落。坚守者、科维兽、六人组还可以勾挑战。任务只看最高档，掉落和挑战任一档出现就提醒。只选势力不会提醒。
           {{ saving ? "保存中…" : "" }}
         </p>
         <div class="standing-watch-block">
           <h3>势力</h3>
           <div class="chip-row">
             <button
-              v-for="b in boards"
-              :key="b.tag"
+              v-for="c in watchCatalog"
+              :key="c.tag"
               type="button"
               class="watch-chip"
-              :class="{ on: isFollowedSyndicate(b.tag) }"
-              @click="toggleSyndicate(b.tag)"
+              :class="{
+                on: c.tag === selectedTag,
+                armed: watchCount(c.tag) > 0,
+              }"
+              @click="selectSyndicate(c.tag)"
             >
-              {{ b.name }}
+              {{ c.name }}
+              <template v-if="watchCount(c.tag) > 0">
+                {{ watchCount(c.tag) }}
+              </template>
             </button>
           </div>
         </div>
-        <div class="standing-watch-block">
-          <h3>任务种类</h3>
-          <p v-if="knownKinds.length === 0" class="standing-empty soft">
-            暂无赏金种类（先更新数据）
+        <div v-if="selectedCatalog" class="standing-watch-block">
+          <h3>任务</h3>
+          <div class="chip-row">
+            <button
+              v-for="job in selectedCatalog.jobs"
+              :key="job.id"
+              type="button"
+              class="watch-chip"
+              :class="{ on: isChosen('jobs', job.id) }"
+              :disabled="saving"
+              @click="toggleChoice('jobs', job.id)"
+            >
+              {{ job.label }}
+            </button>
+          </div>
+        </div>
+        <div v-if="selectedCatalog" class="standing-watch-block">
+          <h3>掉落</h3>
+          <div v-if="pickedRewards.length" class="chip-row watch-picked">
+            <button
+              v-for="item in pickedRewards"
+              :key="item.id"
+              type="button"
+              class="watch-chip on"
+              :disabled="saving"
+              @click="toggleChoice('rewards', item.id)"
+            >
+              {{ item.label }}
+              <span
+                v-if="item.mark"
+                class="pill reward-mark"
+                :class="statusPillKind(item.mark)"
+              >
+                {{ item.mark }}
+              </span>
+            </button>
+          </div>
+          <input
+            v-model="rewardQuery"
+            class="watch-search"
+            type="search"
+            placeholder="搜索掉落名称"
+          />
+          <p v-if="!rewardQuery.trim()" class="standing-empty soft">
+            输入目标后点选
+          </p>
+          <p
+            v-else-if="rewardHits.length === 0"
+            class="standing-empty soft"
+          >
+            没有匹配的掉落
           </p>
           <div v-else class="chip-row">
             <button
-              v-for="k in knownKinds"
-              :key="k.kind"
+              v-for="item in rewardHits"
+              :key="item.id"
               type="button"
               class="watch-chip"
-              :class="{ on: isFollowedKind(k.kind) }"
-              @click="toggleKind(k.kind)"
+              :class="{ on: isChosen('rewards', item.id) }"
+              :disabled="saving"
+              @click="toggleChoice('rewards', item.id)"
             >
-              {{ k.kindZh }}
+              {{ item.label }}
+              <span
+                v-if="item.mark"
+                class="pill reward-mark"
+                :class="statusPillKind(item.mark)"
+              >
+                {{ item.mark }}
+              </span>
             </button>
           </div>
+        </div>
+        <div
+          v-if="selectedCatalog && CYCLE_WATCH_TAGS.has(selectedTag)"
+          class="standing-watch-block"
+        >
+          <h3>挑战</h3>
+          <div v-if="pickedChallenges.length" class="chip-row watch-picked">
+            <button
+              v-for="item in pickedChallenges"
+              :key="item.id"
+              type="button"
+              class="watch-chip on"
+              :disabled="saving"
+              @click="toggleChoice('challenges', item.id)"
+            >
+              {{ item.label }}
+            </button>
+          </div>
+          <p
+            v-if="selectedCatalog.challenges.length === 0"
+            class="standing-empty soft"
+          >
+            挑战清单还没准备好，更新数据后再选
+          </p>
+          <template v-else>
+            <input
+              v-model="challengeQuery"
+              class="watch-search"
+              type="search"
+              placeholder="搜索挑战，例如交给梅利卡"
+            />
+            <p v-if="!challengeQuery.trim()" class="standing-empty soft">
+              输入目标后点选
+            </p>
+            <p
+              v-else-if="challengeHits.length === 0"
+              class="standing-empty soft"
+            >
+              没有匹配的挑战
+            </p>
+            <div v-else class="chip-row">
+              <button
+                v-for="item in challengeHits"
+                :key="item.id"
+                type="button"
+                class="watch-chip"
+                :class="{ on: isChosen('challenges', item.id) }"
+                :disabled="saving"
+                @click="toggleChoice('challenges', item.id)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -448,13 +599,13 @@ function standingLabel(
             </select>
           </label>
           <button
-            v-if="card.kind === 'bounty'"
+            v-if="card.kind === 'bounty' && watchCatalog.some((c) => c.tag === card.tag)"
             type="button"
             class="ghost standing-follow"
-            :class="{ on: isFollowedSyndicate(card.tag) }"
-            @click="toggleSyndicate(card.tag)"
+            :class="{ on: watchCount(card.tag) > 0 }"
+            @click="selectSyndicate(card.tag)"
           >
-            {{ isFollowedSyndicate(card.tag) ? "已关注" : "关注" }}
+            {{ watchCount(card.tag) > 0 ? `已关注 ${watchCount(card.tag)}` : "关注" }}
           </button>
         </div>
       </div>
@@ -504,6 +655,9 @@ function standingLabel(
         <template v-else>
           <p v-if="advancedJob(card.board)" class="standing-advanced-line">
             高级档：{{ advancedJob(card.board)!.title }}
+            <template v-if="advancedJob(card.board)!.challengeZh">
+              · {{ advancedJob(card.board)!.challengeZh }}
+            </template>
             · Lv {{ advancedJob(card.board)!.minEnemyLevel }}–{{
               advancedJob(card.board)!.maxEnemyLevel
             }}
@@ -538,9 +692,22 @@ function standingLabel(
                 class="standing-job-rewards"
               >
                 <span class="standing-rewards-label">奖励</span>
-                <span class="standing-rewards-list">{{
-                  j.rewards.join(" · ")
-                }}</span>
+                <span class="standing-rewards-list">
+                  <span
+                    v-for="(reward, ri) in j.rewards"
+                    :key="reward + ri"
+                    class="standing-reward"
+                  >
+                    <span>{{ reward }}</span>
+                    <span
+                      v-if="rewardMark(reward)"
+                      class="pill reward-mark"
+                      :class="statusPillKind(rewardMark(reward))"
+                    >
+                      {{ rewardMark(reward) }}
+                    </span>
+                  </span>
+                </span>
               </div>
             </div>
           </div>
@@ -616,6 +783,9 @@ function standingLabel(
 }
 .watch-chip {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--line);
   background: var(--bg-row);
   color: var(--text-dim);
@@ -625,10 +795,29 @@ function standingLabel(
   border-radius: 6px;
   cursor: pointer;
 }
-.watch-chip.on {
+.watch-chip.on,
+.watch-chip.armed {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-soft);
+}
+.watch-chip:disabled {
+  cursor: default;
+}
+.watch-search {
+  width: 100%;
+  margin: 8px 0;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-row);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.watch-picked {
+  margin-bottom: 4px;
 }
 .standing-board-head {
   display: flex;
@@ -759,6 +948,18 @@ function standingLabel(
   font-weight: 600;
 }
 .standing-rewards-list {
+  display: inline;
   word-break: break-word;
+}
+.standing-reward {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+.reward-mark {
+  font-size: 10px;
+  padding: 0 5px;
+  line-height: 1.6;
 }
 </style>

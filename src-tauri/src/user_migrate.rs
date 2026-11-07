@@ -16,7 +16,7 @@ use crate::db::{has_column, has_table, read_user_version};
 const WARFRAME_PROGRESS_V14_FLAG: &str = "warframe_progress_v14";
 
 /// 与 [`crate::db`] 中常量保持一致；升级表结构时在此加逐步迁移。
-pub const USER_SCHEMA_VERSION: i32 = 16;
+pub const USER_SCHEMA_VERSION: i32 = 18;
 
 /// 内置 Mod 标签 id（与 v7 种子一致）
 pub const MOD_TAG_CORRUPTED: i64 = 1;
@@ -50,6 +50,8 @@ pub fn migrate_user_conn(conn: &Connection) -> Result<(), String> {
             14 => migrate_user_to_v14(conn)?,
             15 => migrate_user_to_v15(conn)?,
             16 => migrate_user_to_v16(conn)?,
+            17 => migrate_user_to_v17(conn)?,
+            18 => migrate_user_to_v18(conn)?,
             n => {
                 return Err(format!(
                     "缺少 user 迁移步骤 → v{n}（程序目标 {USER_SCHEMA_VERSION}）"
@@ -549,7 +551,25 @@ pub const WEEKLY_BUILTIN_ORDER: &[&str] = &[
     "深层科研",
     "时光科研",
     "衰退室",
+    "普通沉沦之地",
+    "钢铁沉沦之地",
+    "六人本",
+];
+
+/// v13 当时的周常标题。沉沦之地后来改名，不能拿最终清单回写这次排序。
+const V13_WEEKLY_ORDER: &[&str] = &[
+    "玛鲁·阿耶檀识狩猎",
+    "卡尔周常",
+    "执政官猎杀",
+    "无尽回廊",
+    "钢铁回廊",
+    "六人组日历",
+    "深层科研",
+    "时光科研",
+    "衰退室",
     "沉沦之地",
+    "六人本",
+    "普通爬塔",
 ];
 
 /// v12 → v13：周常默认排序。
@@ -562,7 +582,7 @@ fn migrate_user_to_v13(conn: &Connection) -> Result<(), String> {
     )
     .map_err(|e| format!("user → v13 电波周常排序失败: {e}"))?;
 
-    for (i, title) in WEEKLY_BUILTIN_ORDER.iter().enumerate() {
+    for (i, title) in V13_WEEKLY_ORDER.iter().enumerate() {
         conn.execute(
             "UPDATE routine_item SET sort_order = ?1
              WHERE kind = 'weekly' AND title = ?2",
@@ -571,7 +591,7 @@ fn migrate_user_to_v13(conn: &Connection) -> Result<(), String> {
         .map_err(|e| format!("user → v13 排序「{title}」失败: {e}"))?;
     }
 
-    let known: std::collections::HashSet<&str> = WEEKLY_BUILTIN_ORDER
+    let known: std::collections::HashSet<&str> = V13_WEEKLY_ORDER
         .iter()
         .copied()
         .chain(std::iter::once("午夜电波·周常"))
@@ -590,7 +610,7 @@ fn migrate_user_to_v13(conn: &Connection) -> Result<(), String> {
         .map_err(|e| format!("user → v13 行周常失败: {e}"))?;
     drop(stmt);
 
-    let mut next = (WEEKLY_BUILTIN_ORDER.len() as i32) + 1;
+    let mut next = (V13_WEEKLY_ORDER.len() as i32) + 1;
     for (id, title) in rows {
         if known.contains(title.as_str()) {
             continue;
@@ -648,6 +668,104 @@ fn migrate_user_to_v16(conn: &Connection) -> Result<(), String> {
         [],
     )
     .map_err(|e| format!("user → v16 删除佩里塔叛乱失败: {e}"))?;
+    Ok(())
+}
+
+/// v16 → v17：周常内置补上六人本、普通爬塔（排在现有项之后）。
+fn migrate_user_to_v17(conn: &Connection) -> Result<(), String> {
+    if !has_table(conn, "routine_item") {
+        return Ok(());
+    }
+    for title in ["六人本", "普通爬塔"] {
+        let exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM routine_item WHERE kind = 'weekly' AND title = ?1",
+                [title],
+                |r| r.get(0),
+            )
+            .map_err(|e| format!("user → v17 查「{title}」失败: {e}"))?;
+        if exists > 0 {
+            continue;
+        }
+        let max_sort: i32 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(sort_order), -1) FROM routine_item WHERE kind = 'weekly'",
+                [],
+                |r| r.get(0),
+            )
+            .map_err(|e| format!("user → v17 读周常排序失败: {e}"))?;
+        conn.execute(
+            "INSERT INTO routine_item (kind, title, is_builtin, ignored, done, period_key, sort_order, updated_at)
+             VALUES ('weekly', ?1, 1, 0, 0, NULL, ?2, NULL)",
+            params![title, max_sort + 1],
+        )
+        .map_err(|e| format!("user → v17 种子「{title}」失败: {e}"))?;
+    }
+    Ok(())
+}
+
+/// v17 → v18：普通爬塔 → 普通沉沦之地，沉沦之地 → 钢铁沉沦之地，两项相邻。
+fn migrate_user_to_v18(conn: &Connection) -> Result<(), String> {
+    if !has_table(conn, "routine_item") {
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE routine_item SET title = '钢铁沉沦之地'
+         WHERE kind = 'weekly' AND is_builtin = 1 AND title = '沉沦之地'",
+        [],
+    )
+    .map_err(|e| format!("user → v18 改名钢铁沉沦之地失败: {e}"))?;
+    conn.execute(
+        "UPDATE routine_item SET title = '普通沉沦之地'
+         WHERE kind = 'weekly' AND is_builtin = 1 AND title = '普通爬塔'",
+        [],
+    )
+    .map_err(|e| format!("user → v18 改名普通沉沦之地失败: {e}"))?;
+    place_weekly_before(conn, "普通沉沦之地", "钢铁沉沦之地")
+}
+
+/// 把 `moving` 挪到 `anchor` 正前方，其余周常相对顺序不变。
+fn place_weekly_before(conn: &Connection, moving: &str, anchor: &str) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, title FROM routine_item
+             WHERE kind = 'weekly'
+             ORDER BY sort_order ASC, id ASC",
+        )
+        .map_err(|e| format!("user → v18 读周常失败: {e}"))?;
+    let rows: Vec<(i64, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(|e| format!("user → v18 查周常失败: {e}"))?
+        .collect::<Result<_, _>>()
+        .map_err(|e| format!("user → v18 行周常失败: {e}"))?;
+    drop(stmt);
+
+    let Some(anchor_idx) = rows.iter().position(|(_, title)| title == anchor) else {
+        return Ok(());
+    };
+    let Some(moving_idx) = rows.iter().position(|(_, title)| title == moving) else {
+        return Ok(());
+    };
+    if moving_idx + 1 == anchor_idx {
+        return Ok(());
+    }
+
+    let anchor_id = rows[anchor_idx].0;
+    let mut ids: Vec<i64> = rows.into_iter().map(|(id, _)| id).collect();
+    let moving_id = ids.remove(moving_idx);
+    let insert_at = ids
+        .iter()
+        .position(|id| *id == anchor_id)
+        .ok_or_else(|| "user → v18 找不到钢铁沉沦之地".to_string())?;
+    ids.insert(insert_at, moving_id);
+
+    for (i, id) in ids.iter().enumerate() {
+        conn.execute(
+            "UPDATE routine_item SET sort_order = ?1 WHERE id = ?2",
+            params![i as i32, id],
+        )
+        .map_err(|e| format!("user → v18 重排周常失败: {e}"))?;
+    }
     Ok(())
 }
 
@@ -913,6 +1031,6 @@ mod tests {
             )
             .unwrap();
         assert_eq!(daily, 3);
-        assert_eq!(weekly, 11);
+        assert_eq!(weekly, 13);
     }
 }

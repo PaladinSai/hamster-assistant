@@ -11,7 +11,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use catalog::{
-    heal_empty_relic_locations, match_and_record_notifications, refresh_live_world_if_needed,
+    heal_empty_relic_locations, heal_suit_part_uniques, heal_weapon_part_uniques,
+    match_and_record_fissure_notifications, match_and_record_notifications,
+    refresh_live_world_if_needed,
     refresh_resurgence_if_needed, LiveWorldOutcome, ResurgenceOutcome,
 };
 use id::Snowflake;
@@ -85,10 +87,7 @@ impl Drop for BusyGuard {
 
 fn push_bounty_notifications(app: &tauri::AppHandle, data_dir: &std::path::Path) {
     match match_and_record_notifications(data_dir) {
-        Ok(alerts) => {
-            if alerts.is_empty() {
-                return;
-            }
+        Ok(alerts) if !alerts.is_empty() => {
             for alert in &alerts {
                 let _ = app
                     .notification()
@@ -99,7 +98,23 @@ fn push_bounty_notifications(app: &tauri::AppHandle, data_dir: &std::path::Path)
             }
             let _ = app.emit("backend://bounty-alert", alerts);
         }
+        Ok(_) => {}
         Err(e) => eprintln!("[仓鼠] 赏金关注匹配失败: {e}"),
+    }
+    match match_and_record_fissure_notifications(data_dir) {
+        Ok(alerts) if !alerts.is_empty() => {
+            for alert in &alerts {
+                let _ = app
+                    .notification()
+                    .builder()
+                    .title("裂隙")
+                    .body(&alert.body)
+                    .show();
+            }
+            let _ = app.emit("backend://fissure-alert", alerts);
+        }
+        Ok(_) => {}
+        Err(e) => eprintln!("[仓鼠] 裂隙关注匹配失败: {e}"),
     }
 }
 
@@ -153,18 +168,27 @@ where
     F: FnOnce() -> Result<String, String> + Send + 'static,
 {
     if !try_begin(&busy) {
+        eprintln!("[仓鼠] {thread_name}: {busy_message}");
         emit_update_finished(&app, busy_message);
         return Ok(());
     }
     let spawn_busy = Arc::clone(&busy);
     let fail_label = spawn_fail_label.to_string();
+    let log_name = thread_name.to_string();
     std::thread::Builder::new()
         .name(thread_name.into())
         .spawn(move || {
             let _guard = BusyGuard(busy);
+            eprintln!("[仓鼠] {log_name} 开始");
             match job() {
-                Ok(msg) => emit_update_finished(&app, &msg),
-                Err(e) => emit_update_finished(&app, &e),
+                Ok(msg) => {
+                    eprintln!("[仓鼠] {log_name}: {msg}");
+                    emit_update_finished(&app, &msg);
+                }
+                Err(e) => {
+                    eprintln!("[仓鼠] {log_name}: {e}");
+                    emit_update_finished(&app, &e);
+                }
             }
         })
         .map_err(|e| {
@@ -277,13 +301,18 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
-        // 不恢复 VISIBLE：配置里 visible=false 防闪白；显隐由首屏就绪后前端/这里负责
+        // 不恢复 VISIBLE。窗口在配置里直接显示，避免先隐藏再最大化导致网页区域黑屏。
         .plugin(
             WindowStateBuilder::default()
                 .with_state_flags(StateFlags::all() & !StateFlags::VISIBLE)
                 .build(),
         )
         .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+
             #[cfg(desktop)]
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
@@ -333,6 +362,16 @@ pub fn run() {
                 .name("relic-sources-heal".into())
                 .spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(8));
+                    match heal_weapon_part_uniques(&data_dir_heal, snowflake_heal.as_ref()) {
+                        Ok(true) => eprintln!("[仓鼠] 启动自愈武器部件路径完成"),
+                        Ok(false) => {}
+                        Err(e) => eprintln!("[仓鼠] 启动自愈武器部件失败: {e}"),
+                    }
+                    match heal_suit_part_uniques(&data_dir_heal, snowflake_heal.as_ref()) {
+                        Ok(true) => eprintln!("[仓鼠] 启动自愈机体部件路径完成"),
+                        Ok(false) => {}
+                        Err(e) => eprintln!("[仓鼠] 启动自愈机体部件失败: {e}"),
+                    }
                     match heal_empty_relic_locations(&data_dir_heal, snowflake_heal.as_ref()) {
                         Ok(Some(s)) => {
                             eprintln!(
@@ -413,6 +452,8 @@ pub fn run() {
             get_plains_brief_cmd,
             get_bounty_watch_cmd,
             set_bounty_watch_cmd,
+            get_fissure_watch_cmd,
+            set_fissure_watch_cmd,
             get_standing_ranks_cmd,
             set_standing_ranks_cmd,
             get_standing_daily_cmd,

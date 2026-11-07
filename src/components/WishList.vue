@@ -20,6 +20,7 @@ const emit = defineEmits<{
   openWeapon: [familyId: string, weaponId: string];
   openMod: [modId: string];
   openArcane: [arcaneId: string];
+  unwish: [row: WishRow];
 }>();
 
 const rows = computed(() =>
@@ -59,6 +60,14 @@ function onOpen(row: WishRow) {
           </span>
         </span>
         <span class="meta">{{ row.meta }}</span>
+        <button
+          type="button"
+          class="ghost wish-clear"
+          title="取消心愿"
+          @click.stop="emit('unwish', row)"
+        >
+          取消
+        </button>
       </div>
       <div v-if="!hasAnyWish" style="color: var(--text-mute)">
         暂无星标，可在列表里点 ★

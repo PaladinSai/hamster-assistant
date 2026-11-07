@@ -21,6 +21,7 @@ use self::fissure::parse_fissures;
 use self::sortie::{parse_nightwave, parse_sortie};
 use self::weekly::parse_weekly;
 
+pub(crate) use self::bounty::materialize_static_jobs;
 pub(crate) use self::steel::synthesize_steel_incursion;
 
 pub(crate) fn parse_worldstate(body: &[u8]) -> Result<LiveWorldFetch, String> {

@@ -4,15 +4,12 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use chrono::{DateTime, Duration, Utc};
-use reqwest::blocking::Client;
-use reqwest::header::{ETAG, IF_NONE_MATCH};
-use reqwest::StatusCode;
 use rusqlite::{params, Connection};
 use serde_json::Value;
 
-use crate::catalog::i18n::ZhLookup;
 use crate::catalog::ensure_mission_type_i18n;
-use crate::catalog::wfcd::FetchResult;
+use crate::catalog::i18n::ZhLookup;
+use crate::catalog::wfcd::{fetch_json_url, FetchResult};
 use crate::db::{self, open_catalog, open_user};
 use crate::id::Snowflake;
 
@@ -21,10 +18,7 @@ const SETTING_CHECKED_AT: &str = "catalog_drop_locations_checked_at";
 /// 与目录月检一致：有本地来源且未满间隔则不访问网络。
 const CHECK_INTERVAL: Duration = Duration::days(30);
 
-pub const DEFAULT_DROP_ALL_URLS: &[&str] = &[
-    "https://raw.githubusercontent.com/WFCD/warframe-drop-data/gh-pages/data/all.json",
-    "https://cdn.jsdelivr.net/gh/WFCD/warframe-drop-data@gh-pages/data/all.json",
-];
+pub const DEFAULT_DROP_ALL_URL: &str = "https://gh-proxy.org/https://raw.githubusercontent.com/WFCD/warframe-drop-data/gh-pages/data/all.json";
 
 const BOUNTY_KEYS: &[(&str, &str)] = &[
     ("cetusBountyRewards", "Cetus"),
@@ -55,66 +49,8 @@ struct ParsedLocation {
     is_event: bool,
 }
 
-pub fn fetch_drop_all(urls: &[&str], if_none_match: Option<&str>) -> Result<FetchResult, String> {
-    let client = Client::builder()
-        .user_agent("cangshu-assistant/0.1 (drop locations; +https://github.com/)")
-        .timeout(std::time::Duration::from_secs(120))
-        .build()
-        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
-
-    let mut last_err = String::from("无可用上游 URL");
-    for url in urls {
-        match fetch_one(&client, url, if_none_match) {
-            Ok(r) => return Ok(r),
-            Err(e) => {
-                last_err = format!("{url}: {e}");
-                eprintln!("[仓鼠] 掉落表拉取失败，尝试下一源: {last_err}");
-            }
-        }
-    }
-    Err(last_err)
-}
-
-fn fetch_one(
-    client: &Client,
-    url: &str,
-    if_none_match: Option<&str>,
-) -> Result<FetchResult, String> {
-    let mut req = client.get(url);
-    if let Some(etag) = if_none_match {
-        if !etag.is_empty() {
-            req = req.header(IF_NONE_MATCH, etag);
-        }
-    }
-    let resp = req.send().map_err(|e| format!("请求失败: {e}"))?;
-    let status = resp.status();
-    let etag = resp
-        .headers()
-        .get(ETAG)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-
-    if status == StatusCode::NOT_MODIFIED {
-        return Ok(FetchResult {
-            body: Vec::new(),
-            etag,
-            url: url.to_string(),
-            not_modified: true,
-        });
-    }
-    if !status.is_success() {
-        return Err(format!("HTTP {status}"));
-    }
-    let body = resp
-        .bytes()
-        .map_err(|e| format!("读响应失败: {e}"))?
-        .to_vec();
-    Ok(FetchResult {
-        body,
-        etag,
-        url: url.to_string(),
-        not_modified: false,
-    })
+pub fn fetch_drop_all(url: &str, if_none_match: Option<&str>) -> Result<FetchResult, String> {
+    fetch_json_url(url, if_none_match, 120)
 }
 
 /// 「Lith Q3 Relic」→「Lith Q3」
@@ -417,8 +353,8 @@ pub fn refresh_drop_locations(
     refresh_drop_locations_conn(data_dir, &mut catalog, &user, snowflake, force)
 }
 
-/// 若已有遗物但 `relic_location` 为空，用本地 upstream drop-all（必要时联网）回填。
-/// 不创建/拷贝种子库：仅在现有 catalog + user 上操作，避免误覆盖进度。
+/// 若已有遗物但 `relic_location` 为空，联网拉一次 drop-all 再写入。
+/// 拉取失败则返回错误，不改用本地缓存，留下现有来源表。
 pub fn heal_empty_relic_locations(
     data_dir: &Path,
     snowflake: &Snowflake,
@@ -443,27 +379,6 @@ pub fn heal_empty_relic_locations(
     Ok(Some(stats))
 }
 
-fn import_from_local_cache(
-    data_dir: &Path,
-    catalog: &mut Connection,
-    snowflake: &Snowflake,
-) -> Result<Option<DropLocationStats>, String> {
-    let Some(cached) = crate::catalog::upstream_cache::read(
-        data_dir,
-        crate::catalog::upstream_cache::DROP_ALL,
-    )?
-    else {
-        return Ok(None);
-    };
-    let stats = import_drop_locations_json(catalog, &cached, snowflake)?;
-    if stats.locations == 0 {
-        return Ok(None);
-    }
-    let now = Utc::now().to_rfc3339();
-    let _ = db::set_setting(catalog, SETTING_CHECKED_AT, &now);
-    Ok(Some(stats))
-}
-
 pub fn refresh_drop_locations_conn(
     data_dir: &Path,
     catalog: &mut Connection,
@@ -482,44 +397,17 @@ pub fn refresh_drop_locations_conn(
         return Ok(DropLocationStats::default());
     }
 
-    // 空表优先本地 cache，避免 Relics 更新清空后联网失败导致长期空白
-    if empty {
-        if let Some(stats) = import_from_local_cache(data_dir, catalog, snowflake)? {
-            eprintln!(
-                "[仓鼠] 遗物来源已从本地 drop-all 回填: locations≈{} mission≈{} bounty≈{}",
-                stats.locations, stats.mission, stats.bounty
-            );
-            return Ok(stats);
-        }
-    }
-
     let prev = if force {
         None
     } else {
         db::get_setting(catalog, SETTING_ETAG)?
     };
-    let fetched = match fetch_drop_all(DEFAULT_DROP_ALL_URLS, prev.as_deref()) {
-        Ok(f) => f,
-        Err(e) => {
-            if let Some(stats) = import_from_local_cache(data_dir, catalog, snowflake)? {
-                eprintln!(
-                    "[仓鼠] 掉落表联网失败，已用本地缓存回填: locations≈{} ({e})",
-                    stats.locations
-                );
-                return Ok(stats);
-            }
-            return Err(e);
-        }
-    };
+    // 失败直接返回，不用本地 drop-all 补写，留下现有 relic_location。
+    let fetched = fetch_drop_all(DEFAULT_DROP_ALL_URL, prev.as_deref())?;
     let now = Utc::now().to_rfc3339();
     let _ = db::set_setting(catalog, SETTING_CHECKED_AT, &now);
 
     if fetched.not_modified {
-        if empty {
-            if let Some(stats) = import_from_local_cache(data_dir, catalog, snowflake)? {
-                return Ok(stats);
-            }
-        }
         return Ok(DropLocationStats::default());
     }
 
@@ -667,52 +555,6 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM relic_location", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 1);
-
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn heals_from_local_cache_when_locations_wiped() {
-        let dir = temp_dir("heal_cache");
-        db::init_databases_ex(&dir, false).unwrap();
-        let mut catalog = db::open_catalog(&db::catalog_path(&dir)).unwrap();
-        let user = db::open_user(&db::user_path(&dir)).unwrap();
-        let snow = Snowflake::new(1);
-
-        let wf = br#"[
-          {"name":"Saryn","uniqueName":"/Lotus/Powersuits/Saryn/Saryn","category":"Warframes","type":"Warframe","components":[{"name":"Blueprint"}]},
-          {"name":"Saryn Prime","uniqueName":"/Lotus/Powersuits/Saryn/SarynPrime","category":"Warframes","type":"Warframe","isPrime":true,"components":[{"name":"Blueprint"},{"name":"Neuroptics"},{"name":"Chassis"},{"name":"Systems"}]}
-        ]"#;
-        import_warframes_json(&mut catalog, wf, &snow).unwrap();
-        let relics = br#"[
-          {"name":"Lith A1 Intact","vaulted":false,"rewards":[
-            {"rarity":"Uncommon","item":{"name":"Saryn Prime Neuroptics Blueprint","uniqueName":"/Lotus/Types/Recipes/WarframeRecipes/SarynPrimeHelmetBlueprint"}}
-          ]}
-        ]"#;
-        import_relics_json(&mut catalog, relics, &snow).unwrap();
-
-        let drops = br#"{
-          "missionRewards":{"Mercury":{"Apollodorus":{"gameMode":"Survival","rewards":{"A":[{"itemName":"Lith A1 Relic","chance":7.69}]}}}},
-          "cetusBountyRewards":[]
-        }"#;
-        crate::catalog::upstream_cache::save(&dir, crate::catalog::upstream_cache::DROP_ALL, drops)
-            .unwrap();
-
-        // 模拟 Relics 重导清空来源
-        catalog
-            .execute_batch("DELETE FROM relic_location;")
-            .unwrap();
-        let empty: i64 = catalog
-            .query_row("SELECT COUNT(*) FROM relic_location", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(empty, 0);
-
-        let stats = refresh_drop_locations_conn(&dir, &mut catalog, &user, &snow, true).unwrap();
-        assert!(stats.locations >= 1);
-        let n: i64 = catalog
-            .query_row("SELECT COUNT(*) FROM relic_location", [], |r| r.get(0))
-            .unwrap();
-        assert!(n >= 1);
 
         let _ = fs::remove_dir_all(&dir);
     }

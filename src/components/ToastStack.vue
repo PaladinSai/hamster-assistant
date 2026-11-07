@@ -5,6 +5,7 @@ import LiveRemain from "./routine/LiveRemain.vue";
 
 const emit = defineEmits<{
   openStanding: [section: Exclude<StandingSection, "overview">];
+  openFissure: [];
 }>();
 
 const { toasts, dismissToast } = useAppToasts();
@@ -17,8 +18,18 @@ const TAG_TO_SECTION = Object.fromEntries(
   ).map(([section, tag]) => [tag, section]),
 ) as Record<string, Exclude<StandingSection, "overview">>;
 
-function onToastClick(t: { id: string; standingTag: string | null; actions?: readonly unknown[] }) {
+function onToastClick(t: {
+  id: string;
+  standingTag: string | null;
+  openFissure: boolean;
+  actions?: readonly unknown[];
+}) {
   if (t.actions?.length) return;
+  if (t.openFissure) {
+    emit("openFissure");
+    dismissToast(t.id);
+    return;
+  }
   const tag = t.standingTag;
   if (!tag) return;
   const section = TAG_TO_SECTION[tag];
@@ -39,7 +50,7 @@ function onAction(id: string, run: () => void) {
       v-for="t in toasts"
       :key="t.id"
       class="toast-card"
-      :class="{ clickable: !!t.standingTag && !t.actions?.length }"
+      :class="{ clickable: (!!t.standingTag || t.openFissure) && !t.actions?.length }"
       role="status"
       @click="onToastClick(t)"
     >

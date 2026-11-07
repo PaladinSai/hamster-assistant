@@ -1,5 +1,7 @@
 //! 类型与常量。
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 pub(crate) const SETTING_CHECKED_AT: &str = "live_world_checked_at";
@@ -18,6 +20,8 @@ pub(crate) const LEGACY_WEEKLY_JSON_KEY: &str = "live_weekly_brief_json";
 
 /// user.sqlite：声望关注偏好
 pub const SETTING_BOUNTY_WATCH: &str = "bounty_watch_json";
+/// user.sqlite：裂隙关注（种类、纪元、任务类型）
+pub const SETTING_FISSURE_WATCH: &str = "fissure_watch_json";
 /// user.sqlite：各势力声望等级（手动记录）
 pub const SETTING_STANDING_RANKS: &str = "standing_ranks_json";
 /// user.sqlite：声望日常/周常完成勾选（UTC 日切 / 周一重置）
@@ -283,6 +287,42 @@ pub struct FissureBriefDto {
     pub storm: Vec<LiveFissureDto>,
 }
 
+/// 一条裂隙关注：种类 + 纪元 + 任务类型，三者绑在一起。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FissureWatchTarget {
+    /// `normal` / `steel` / `storm`。
+    pub kind: String,
+    /// 古纪 / 前纪 / 中纪 / 后纪。
+    pub tier: String,
+    pub mission_type: String,
+}
+
+/// 裂隙关注。裂隙要和某一条目标的三项完全一致才提醒。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FissureWatchPrefs {
+    #[serde(default)]
+    pub targets: Vec<FissureWatchTarget>,
+    #[serde(default)]
+    pub last_notified: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FissureWatchView {
+    pub prefs: FissureWatchPrefs,
+    pub mission_types: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FissureAlertDto {
+    pub body: String,
+    /// 这一条裂隙自己的到期时间，弹窗倒计时到点关闭。
+    pub expiry: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct LiveWorldFetch {
     pub sortie: SortieApi,
@@ -301,6 +341,9 @@ pub(crate) struct LiveWorldFetch {
 pub struct BountyBriefApi {
     #[serde(default)]
     pub boards: Vec<BountyBoardApi>,
+    /// 当前板上 MOD / 蓝图奖励的库存状态。键是奖励展示名。其它奖励不在这里。
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub reward_marks: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -337,15 +380,59 @@ pub struct BountyJobApi {
     pub reward_table: String,
 }
 
+/// 某一势力已勾选的关注。空的三项不会单独触发提醒。
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyndicateWatch {
+    pub tag: String,
+    /// 任务池 id：平原是 jobType 末段，轮换势力是 cycle 节点。
+    #[serde(default)]
+    pub jobs: Vec<String>,
+    /// 掉落展示名（与赏金板上的中文奖励一致）。
+    #[serde(default)]
+    pub rewards: Vec<String>,
+    /// 挑战展示句（与赏金板上的挑战文案一致）。仅轮换三家使用。
+    #[serde(default)]
+    pub challenges: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BountyWatchPrefs {
     #[serde(default)]
-    pub followed_syndicates: Vec<String>,
-    #[serde(default)]
-    pub followed_job_kinds: Vec<String>,
+    pub watches: Vec<SyndicateWatch>,
     #[serde(default)]
     pub last_notified: Vec<String>,
+}
+
+/// 关注设置里一行可勾选项。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WatchChoice {
+    pub id: String,
+    pub label: String,
+    /// MOD / 蓝图的库存状态。任务和挑战、以及其它掉落为空。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark: Option<String>,
+}
+
+/// 一个势力的任务池、掉落池、挑战池。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyndicateWatchCatalog {
+    pub tag: String,
+    pub name: String,
+    pub jobs: Vec<WatchChoice>,
+    pub rewards: Vec<WatchChoice>,
+    pub challenges: Vec<WatchChoice>,
+}
+
+/// 读关注时一并带上可选清单，避免前端再猜任务池。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BountyWatchView {
+    pub prefs: BountyWatchPrefs,
+    pub catalog: Vec<SyndicateWatchCatalog>,
 }
 
 /// 赏金关注命中后的通知条目（系统通知 + 程序内弹窗共用）。

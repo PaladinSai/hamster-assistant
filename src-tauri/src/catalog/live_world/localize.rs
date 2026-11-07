@@ -105,25 +105,38 @@ pub(crate) fn mission_type_fallback_zh(en: &str) -> String {
         "Mobile Defense" => "移动防御".into(),
         "Interception" => "拦截".into(),
         "Hijack" => "劫持".into(),
-        "Assault" => "突击（奥罗金）".into(),
+        "Assault" => "强袭".into(),
         "Excavation" => "挖掘".into(),
-        "Hive" => "巢穴".into(),
+        "Hive" => "清巢".into(),
         "Capture" => "捕获".into(),
         "Assassination" => "刺杀".into(),
         "Pursuit" => "追击".into(),
         "Rush" => "竞速".into(),
-        "Infested Salvage" => "打捞".into(),
-        "Defection" => "撤离".into(),
+        "Infested Salvage" => "INFESTED 资源回收".into(),
+        "Defection" => "叛逃".into(),
         "Arena" => "竞技场".into(),
         "Free Roam" => "开放世界".into(),
-        "Alchemy" => "炼金".into(),
+        "Alchemy" => "元素转换".into(),
         "Legacyte Harvest" => "传承种收割".into(),
         "Hell-Scrub" => "地狱净化".into(),
         "Void Flood" => "虚空洪流".into(),
-        "Void Cascade" => "虚空惊涛".into(),
-        "Void Armageddon" => "虚空大灾变".into(),
+        "Void Cascade" => "虚空覆涌".into(),
+        "Void Armageddon" => "虚空决战".into(),
         "Disruption" => "中断".into(),
         _ => en.to_string(),
+    }
+}
+
+/// 已经写进库里的旧简称，读出来时改成官中任务名。
+pub(crate) fn canon_fissure_mission_zh(name: &str) -> String {
+    match name.trim() {
+        "巢穴" => "清巢".into(),
+        "打捞" => "INFESTED 资源回收".into(),
+        "撤离" => "叛逃".into(),
+        "炼金" => "元素转换".into(),
+        "虚空惊涛" | "虚空串联" => "虚空覆涌".into(),
+        "虚空大灾变" => "虚空决战".into(),
+        other => other.to_string(),
     }
 }
 
@@ -432,6 +445,14 @@ mod tests {
         assert_eq!(mission_type_en("MT_DISRUPTION"), "Disruption");
         assert_eq!(mission_type("MT_ARTIFACT"), "中断");
         assert_eq!(resolve_mission_type(None, "Disruption"), "中断");
+        assert_eq!(mission_type("MT_VOID_CASCADE"), "虚空覆涌");
+        assert_eq!(mission_type("MT_ARMAGEDDON"), "虚空决战");
+        assert_eq!(mission_type("MT_ALCHEMY"), "元素转换");
+        assert_eq!(mission_type("MT_EVACUATION"), "叛逃");
+        assert_eq!(mission_type("MT_SALVAGE"), "INFESTED 资源回收");
+        assert_eq!(mission_type("MT_HIVE"), "清巢");
+        assert_eq!(canon_fissure_mission_zh("虚空惊涛"), "虚空覆涌");
+        assert_eq!(canon_fissure_mission_zh("打捞"), "INFESTED 资源回收");
     }
 
     #[test]

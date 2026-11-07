@@ -27,7 +27,7 @@ pub use arcanes::{
 };
 pub use drop_locations::{
     heal_empty_relic_locations, import_drop_locations_json, refresh_drop_locations,
-    refresh_drop_locations_conn, DropLocationStats, DEFAULT_DROP_ALL_URLS,
+    refresh_drop_locations_conn, DropLocationStats, DEFAULT_DROP_ALL_URL,
 };
 pub use i18n::{
     apply_display_zh_to_entities, ensure_mission_type_i18n, ensure_name_i18n_from_bundled,
@@ -46,9 +46,12 @@ pub use live_world::{
     force_refresh_live_nightwave, force_refresh_live_routines, force_refresh_live_world,
     get_arbitration_brief, get_bounty_brief, get_bounty_watch, get_fissure_brief,
     get_live_daily_brief, get_plains_brief, get_standing_daily, get_standing_ranks,
-    get_weekly_shop_brief, match_and_record_notifications, refresh_live_world_if_needed,
-    set_bounty_watch, set_standing_daily, set_standing_ranks, ArbitrationBriefDto, BountyAlertDto,
-    BountyBriefApi, BountyWatchPrefs, FissureBriefDto, LiveDailyBrief, LiveWorldOutcome,
+    get_fissure_watch, get_weekly_shop_brief, match_and_record_fissure_notifications,
+    match_and_record_notifications, refresh_live_world_if_needed, set_bounty_watch,
+    set_fissure_watch, set_standing_daily, set_standing_ranks, ArbitrationBriefDto, BountyAlertDto,
+    BountyBriefApi, BountyWatchPrefs, BountyWatchView, FissureAlertDto, FissureBriefDto,
+    FissureWatchPrefs, FissureWatchTarget, FissureWatchView, LiveDailyBrief,
+    LiveWorldOutcome,
     PlainsBriefDto, StandingDailyPrefs, StandingRanksPrefs, WeeklyShopBrief,
 };
 pub use mods::{import_mods_json, ModImportStats, SRC_KEY, SRC_NIGHTMARE, SRC_SYNDICATE};
@@ -56,14 +59,16 @@ pub use nicknames::{
     apply_bundled_warframe_nicknames, apply_nicknames_map, read_nicknames_json,
 };
 pub use refresh::{
-    force_refresh_catalog, refresh_catalog_if_needed, update_arcanes_catalog, update_mods_catalog,
-    update_relics_catalog, update_warframes_catalog, update_weapons_catalog, RefreshOutcome,
+    force_refresh_catalog, heal_suit_part_uniques, heal_weapon_part_uniques,
+    refresh_catalog_if_needed,
+    update_arcanes_catalog, update_mods_catalog, update_relics_catalog, update_warframes_catalog,
+    update_weapons_catalog, RefreshOutcome,
 };
 pub use relic_sources::{
     get_relic_source_filter_options, search_relic_sources, RelicSourceFilterOptions,
     RelicSourceQuery, RelicSourceSearchResult,
 };
-pub use relics::{import_relics_json, RelicImportStats, DEFAULT_RELICS_URLS};
+pub use relics::{import_relics_json, RelicImportStats, DEFAULT_RELICS_URL};
 pub use resurgence::{
     force_refresh_resurgence, get_resurgence_summary, load_resurgence_relic_keys,
     refresh_resurgence_if_needed, ResurgenceOutcome, ResurgenceSummary,
@@ -73,7 +78,7 @@ pub use weapons::{
     is_incarnon_genesis_family, weapon_family_and_variant, WeaponImportStats,
 };
 pub use wfcd::{
-    fetch_archwings, fetch_pets, fetch_sentinels, fetch_warframes, DEFAULT_ARCHWING_URLS,
-    DEFAULT_I18N_URLS, DEFAULT_MISC_URLS, DEFAULT_PETS_URLS, DEFAULT_SENTINELS_URLS,
-    DEFAULT_WARFRAMES_URLS,
+    fetch_archwings, fetch_pets, fetch_sentinels, fetch_warframes, DEFAULT_ARCHWING_URL,
+    DEFAULT_I18N_URL, DEFAULT_MISC_URL, DEFAULT_PETS_URL, DEFAULT_SENTINELS_URL,
+    DEFAULT_WARFRAMES_URL,
 };

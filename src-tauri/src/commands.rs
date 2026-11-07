@@ -9,12 +9,16 @@ use tauri::State;
 use crate::catalog::{
     force_refresh_live_routines, force_refresh_live_world, force_refresh_resurgence,
     get_arbitration_brief, get_bounty_brief, get_bounty_watch, get_fissure_brief,
+    get_fissure_watch,
     get_live_daily_brief, get_plains_brief, get_relic_source_filter_options,
     get_resurgence_summary, get_standing_daily, get_standing_ranks, get_weekly_shop_brief,
-    search_relic_sources, set_bounty_watch, set_standing_daily, set_standing_ranks,
+    search_relic_sources, set_bounty_watch, set_fissure_watch, set_standing_daily,
+    set_standing_ranks,
     update_arcanes_catalog, update_mods_catalog, update_relics_catalog,
     update_warframes_catalog, update_weapons_catalog, ArbitrationBriefDto, BountyBriefApi,
-    BountyWatchPrefs, FissureBriefDto, LiveDailyBrief, LiveWorldOutcome, PlainsBriefDto,
+    BountyWatchPrefs, BountyWatchView, FissureBriefDto, FissureWatchPrefs, FissureWatchView,
+    LiveDailyBrief, LiveWorldOutcome,
+    PlainsBriefDto,
     RelicSourceFilterOptions, RelicSourceQuery, RelicSourceSearchResult, ResurgenceOutcome,
     ResurgenceSummary, StandingDailyPrefs, StandingRanksPrefs, WeeklyShopBrief,
 };
@@ -267,7 +271,7 @@ pub fn get_plains_brief_cmd(
 #[tauri::command]
 pub fn get_bounty_watch_cmd(
     state: State<'_, AppState>,
-) -> Result<BountyWatchPrefs, String> {
+) -> Result<BountyWatchView, String> {
     get_bounty_watch(&state.data_dir)
 }
 
@@ -277,6 +281,21 @@ pub fn set_bounty_watch_cmd(
     prefs: BountyWatchPrefs,
 ) -> Result<BountyWatchPrefs, String> {
     set_bounty_watch(&state.data_dir, prefs)
+}
+
+#[tauri::command]
+pub fn get_fissure_watch_cmd(
+    state: State<'_, AppState>,
+) -> Result<FissureWatchView, String> {
+    get_fissure_watch(&state.data_dir)
+}
+
+#[tauri::command]
+pub fn set_fissure_watch_cmd(
+    state: State<'_, AppState>,
+    prefs: FissureWatchPrefs,
+) -> Result<FissureWatchPrefs, String> {
+    set_fissure_watch(&state.data_dir, prefs)
 }
 
 #[tauri::command]

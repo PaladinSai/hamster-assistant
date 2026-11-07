@@ -94,6 +94,11 @@ pub(super) fn parse_bounties(
             }
         }
 
+        // 夜帽 / 大蜘蛛：世界状态没有赏金板，用固定任务补上。
+        if !localize_bounty::static_bounty_jobs(tag).is_empty() {
+            jobs = materialize_static_jobs(tag);
+        }
+
         // worldState Jobs 空时，用 bounty-cycle 补齐三家
         let mut filled_from_cycle = false;
         if jobs.is_empty() && localize_bounty::is_cycle_filled_syndicate(tag) {
@@ -161,6 +166,37 @@ pub(super) fn parse_bounties(
         });
     }
 
-    BountyBriefApi { boards }
+    BountyBriefApi {
+        boards,
+        ..Default::default()
+    }
+}
+
+pub(crate) fn materialize_static_jobs(tag: &str) -> Vec<BountyJobApi> {
+    let mut jobs: Vec<BountyJobApi> = localize_bounty::static_bounty_jobs(tag)
+        .iter()
+        .map(|job| BountyJobApi {
+            job_type: job.id.into(),
+            kind: job.kind.into(),
+            kind_zh: job.kind_zh.into(),
+            title: job.title.into(),
+            min_enemy_level: job.min_lv,
+            max_enemy_level: job.max_lv,
+            standing_total: job.standing,
+            is_advanced: false,
+            is_steel_path: job.steel,
+            challenge_zh: job.challenge.into(),
+            rewards: job.rewards.iter().map(|s| (*s).to_string()).collect(),
+            reward_table: String::new(),
+        })
+        .collect();
+    if let Some(max_standing) = jobs.iter().map(|j| j.standing_total).max() {
+        for job in &mut jobs {
+            if job.standing_total == max_standing && max_standing > 0 {
+                job.is_advanced = true;
+            }
+        }
+    }
+    jobs
 }
 

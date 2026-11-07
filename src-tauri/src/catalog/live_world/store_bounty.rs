@@ -117,7 +117,10 @@ pub(crate) fn read_bounties(catalog: &Connection) -> Result<BountyBriefApi, Stri
         boards.into_iter().map(|b| (b.tag.clone(), b)).collect();
     let mut ordered = Vec::new();
     for (tag, name) in localize_bounty::BOUNTY_SYNDICATES {
-        if let Some(b) = by_tag.remove(*tag) {
+        if let Some(mut b) = by_tag.remove(*tag) {
+            if !super::localize_bounty::static_bounty_jobs(tag).is_empty() || b.jobs.is_empty() {
+                b.jobs = super::parse::materialize_static_jobs(tag);
+            }
             ordered.push(b);
         } else {
             ordered.push(BountyBoardApi {
@@ -125,14 +128,17 @@ pub(crate) fn read_bounties(catalog: &Connection) -> Result<BountyBriefApi, Stri
                 name: (*name).into(),
                 activation: None,
                 expiry: None,
-                jobs: vec![],
+                jobs: super::parse::materialize_static_jobs(tag),
             });
         }
     }
     for (_, b) in by_tag {
         ordered.push(b);
     }
-    Ok(BountyBriefApi { boards: ordered })
+    Ok(BountyBriefApi {
+        boards: ordered,
+        ..Default::default()
+    })
 }
 
 fn read_jobs(catalog: &Connection, board_tag: &str) -> Result<Vec<BountyJobApi>, String> {
@@ -226,6 +232,7 @@ fn empty_bounty_brief() -> BountyBriefApi {
                 jobs: vec![],
             })
             .collect(),
+        ..Default::default()
     }
 }
 

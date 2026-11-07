@@ -31,6 +31,7 @@ import ToastStack from "./ToastStack.vue";
 import WarframeDrawer from "./WarframeDrawer.vue";
 import WeaponDrawer from "./WeaponDrawer.vue";
 import WeaponListView from "./WeaponListView.vue";
+import type { WishRow } from "../lib/wish";
 import WishView from "./WishView.vue";
 
 const relicFocusKey = ref<string | null>(null);
@@ -182,6 +183,7 @@ const warframe = useWarframeProgress({
 const {
   filter,
   statusFilter,
+  vaultFilter,
   companionTypeFilter,
   selectedId,
   detail,
@@ -190,7 +192,6 @@ const {
   closeDrawer,
   openWarframe,
   toggleHelminth,
-  toggleForma,
   toggleMastered,
   updateStatus,
   updateStatusFromDrawer,
@@ -200,7 +201,6 @@ const {
   toggleWish,
   toggleWishFromDrawer,
   toggleHelminthFromDrawer,
-  toggleFormaFromDrawer,
   toggleMasteredFromDrawer,
   markAllOwned: markAllWarframesOwned,
 } = warframe;
@@ -286,6 +286,23 @@ const {
   openArcaneFromHome,
   markAllOwned: markAllArcanesOwned,
 } = arcane;
+
+function unwish(row: WishRow) {
+  if (row.kind === "warframe") {
+    const item = families.value.find((f) => f.warframeId === row.warframeId);
+    if (item) void toggleWish(item);
+    return;
+  }
+  if (row.kind === "weapon") {
+    void toggleWeaponWish(row.weaponId, 0);
+    return;
+  }
+  if (row.kind === "mod") {
+    void toggleModWish(row.modId, 0);
+    return;
+  }
+  void toggleArcaneWish(row.arcaneId, 0);
+}
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key !== "Escape") return;
@@ -674,6 +691,7 @@ onUnmounted(() => {
             @open-weapon="openWeaponFromHome"
             @open-mod="openModFromHome"
             @open-arcane="openArcaneFromHome"
+            @unwish="unwish"
           />
         </PagePane>
         <PagePane v-else-if="view === 'feed'">
@@ -711,6 +729,7 @@ onUnmounted(() => {
             :families="activeSuitFamilies"
             :filter="filter"
             :status-filter="statusFilter"
+            :vault-filter="vaultFilter"
             :companion-type-filter="companionTypeFilter"
             :query="query"
             :selected-id="selectedId"
@@ -718,10 +737,10 @@ onUnmounted(() => {
             :marking-all="warframeMarkingAll"
             @update:filter="filter = $event"
             @update:status-filter="statusFilter = $event"
+            @update:vault-filter="vaultFilter = $event"
             @update:companion-type-filter="companionTypeFilter = $event"
             @select="openWarframe"
             @toggle-helminth="toggleHelminth"
-            @toggle-forma="toggleForma"
             @toggle-mastered="toggleMastered"
             @toggle-wish="toggleWish"
             @update-status="updateStatus"
@@ -859,7 +878,6 @@ onUnmounted(() => {
     @update-note="updateNote"
     @toggle-wish="toggleWishFromDrawer"
     @toggle-helminth="toggleHelminthFromDrawer"
-    @toggle-forma="toggleFormaFromDrawer"
     @toggle-mastered="toggleMasteredFromDrawer"
     @open-relic="openRelicSource"
   />
@@ -884,5 +902,8 @@ onUnmounted(() => {
     @open-relic="openRelicSource"
   />
 
-  <ToastStack @open-standing="setStandingSection" />
+  <ToastStack
+    @open-standing="setStandingSection"
+    @open-fissure="setFeedSection('fissures')"
+  />
 </template>

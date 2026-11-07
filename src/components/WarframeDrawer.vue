@@ -26,7 +26,6 @@ const emit = defineEmits<{
   updateNote: [note: string];
   toggleWish: [];
   toggleHelminth: [];
-  toggleForma: [];
   toggleMastered: [];
   openRelic: [relicKey: string];
 }>();
@@ -162,14 +161,6 @@ function openRelicInApp(relicKey: string) {
             @click="emit('toggleMastered')"
           >
             {{ warframe.mastered ? "已掌握" : "未掌握" }}
-          </button>
-          <button
-            type="button"
-            class="pill toggle"
-            :class="warframe.formaDone ? 'ok' : 'mute'"
-            @click="emit('toggleForma')"
-          >
-            {{ warframe.formaDone ? "已挖" : "未挖" }}
           </button>
         </div>
 

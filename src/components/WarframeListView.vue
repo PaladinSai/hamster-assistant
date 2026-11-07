@@ -2,12 +2,17 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { computed } from "vue";
 import type { WarframeListItem } from "../lib/api";
-import type { FilterKey, WarframeStatusFilter } from "../lib/status";
+import type {
+  FilterKey,
+  WarframeStatusFilter,
+  WarframeVaultFilter,
+} from "../lib/status";
 import {
   BASE_STATUS_OPTIONS,
   vaultStatusLabel,
   warframeVariantLabel,
   WARFRAME_STATUS_FILTER_OPTS,
+  WARFRAME_VAULT_FILTER_OPTS,
 } from "../lib/status";
 import { wishTitle } from "../lib/wish";
 import { huijiSuitWikiUrl } from "../lib/wiki/huiji";
@@ -25,7 +30,6 @@ type WarframeSortKey =
   | "helminth"
   | "vault"
   | "mastered"
-  | "forma"
   | "note";
 
 const { sortKey, toggleSort, sortMark, cmpStr, cmpNum } =
@@ -45,6 +49,7 @@ const props = withDefaults(
     families: WarframeListItem[];
     filter: FilterKey;
     statusFilter: WarframeStatusFilter;
+    vaultFilter?: WarframeVaultFilter;
     companionTypeFilter?: CompanionTypeFilter;
     query: string;
     selectedId: string | null;
@@ -53,16 +58,16 @@ const props = withDefaults(
     /** 战甲全功能；Archwing / 机甲 / 同伴隐藏 Helminth·重生等筛选项 */
     mode?: "warframe" | "archwing" | "necramech" | "companion";
   }>(),
-  { mode: "warframe", companionTypeFilter: "all" },
+  { mode: "warframe", companionTypeFilter: "all", vaultFilter: "all" },
 );
 
 const emit = defineEmits<{
   "update:filter": [value: FilterKey];
   "update:statusFilter": [value: WarframeStatusFilter];
+  "update:vaultFilter": [value: WarframeVaultFilter];
   "update:companionTypeFilter": [value: CompanionTypeFilter];
   select: [warframeId: string];
   toggleHelminth: [item: WarframeListItem];
-  toggleForma: [item: WarframeListItem];
   toggleMastered: [item: WarframeListItem];
   toggleWish: [item: WarframeListItem];
   updateStatus: [warframeId: string, status: number];
@@ -111,18 +116,13 @@ const filters = computed((): { key: FilterKey; label: string }[] => {
   if (props.mode === "warframe") {
     return [
       { key: "all", label: "全部" },
+      { key: "base", label: "普通" },
+      { key: "prime", label: "Prime" },
       { key: "helminth", label: "待喂 Helminth" },
-      { key: "rebirth", label: "当前重生" },
-      { key: "farmable", label: "可刷未拿" },
-      { key: "noPrime", label: "缺Prime" },
-      { key: "noBase", label: "本体缺口" },
-      { key: "unforma", label: "未挖" },
-      { key: "unmastered", label: "未掌握" },
     ];
   }
   return [
     { key: "all", label: "全部" },
-    { key: "unforma", label: "未挖" },
     { key: "unmastered", label: "未掌握" },
   ];
 });
@@ -174,29 +174,43 @@ function matchesFilter(f: WarframeListItem) {
   const sibs = byFamily(f.familyId);
   const prime = sibs.find((x) => x.variant === 1);
   switch (filter) {
+    case "base":
+      return f.variant !== 1;
+    case "prime":
+      return f.variant === 1;
     case "helminth":
       return (
         f.variant === 0 &&
+        f.mastered === 1 &&
         f.status === 3 &&
         !!prime &&
         prime.status === 3 &&
         !f.helminth
       );
-    case "noBase":
-      return f.variant === 0 && f.status !== 3;
-    case "noPrime":
-      return f.variant === 1 && f.status !== 3;
-    case "rebirth":
-      return f.variant === 1 && f.vaultStatus === 3;
-    case "farmable":
-      return f.variant === 1 && f.vaultStatus === 1 && f.status !== 3;
-    case "unforma":
-      return f.status === 3 && f.formaDone === 0;
     case "unmastered":
       return f.mastered === 0;
     default:
       return true;
   }
+}
+
+function matchesVault(f: WarframeListItem) {
+  if (props.mode !== "warframe" || props.filter !== "prime") return true;
+  switch (props.vaultFilter) {
+    case "unvaulted":
+      return f.vaultStatus === 1;
+    case "vaulted":
+      return f.vaultStatus === 2;
+    case "resurgence":
+      return f.vaultStatus === 3;
+    default:
+      return true;
+  }
+}
+
+function onFilterClick(key: FilterKey) {
+  emit("update:filter", key);
+  emit("update:vaultFilter", "all");
 }
 
 function matchesStatus(f: WarframeListItem) {
@@ -232,8 +246,6 @@ function compareWarframes(a: WarframeListItem, b: WarframeListItem) {
       return cmpNum(a.vaultStatus ?? -1, b.vaultStatus ?? -1);
     case "mastered":
       return cmpNum(a.mastered, b.mastered);
-    case "forma":
-      return cmpNum(a.formaDone, b.formaDone);
     case "note":
       return cmpStr(a.note ?? "", b.note ?? "");
     default:
@@ -247,6 +259,7 @@ const rows = computed(() => {
       matchesQuery(f) &&
       matchesFilter(f) &&
       matchesStatus(f) &&
+      matchesVault(f) &&
       matchesCompanionType(f),
   );
   if (!sortKey.value) return list;
@@ -280,13 +293,12 @@ function onRowClick(f: WarframeListItem, e: MouseEvent) {
 }
 
 function onToggle(
-  kind: "helminth" | "forma" | "mastered" | "wish",
+  kind: "helminth" | "mastered" | "wish",
   f: WarframeListItem,
   e: MouseEvent,
 ) {
   e.stopPropagation();
   if (kind === "helminth") emit("toggleHelminth", f);
-  else if (kind === "forma") emit("toggleForma", f);
   else if (kind === "mastered") emit("toggleMastered", f);
   else emit("toggleWish", f);
 }
@@ -319,7 +331,7 @@ function variantClass(variant: number) {
             :key="f.key"
             type="button"
             :class="{ on: filter === f.key }"
-            @click="emit('update:filter', f.key)"
+            @click="onFilterClick(f.key)"
           >
             {{ f.label }}
           </button>
@@ -357,6 +369,23 @@ function variantClass(variant: number) {
             type="button"
             :class="{ on: statusFilter === o.key }"
             @click="emit('update:statusFilter', o.key)"
+          >
+            {{ o.label }}
+          </button>
+        </div>
+      </div>
+      <div
+        v-if="mode === 'warframe' && filter === 'prime'"
+        class="toolbar"
+        style="padding-top: 0"
+      >
+        <div class="seg">
+          <button
+            v-for="o in WARFRAME_VAULT_FILTER_OPTS"
+            :key="o.key"
+            type="button"
+            :class="{ on: vaultFilter === o.key }"
+            @click="emit('update:vaultFilter', o.key)"
           >
             {{ o.label }}
           </button>
@@ -426,11 +455,6 @@ function variantClass(variant: number) {
               </button>
             </th>
             <th>
-              <button type="button" class="list-sort" @click="toggleSort('forma')">
-                已挖<span v-if="sortMark('forma')" class="sort-mark">{{ sortMark("forma") }}</span>
-              </button>
-            </th>
-            <th>
               <button type="button" class="list-sort" @click="toggleSort('note')">
                 备注<span v-if="sortMark('note')" class="sort-mark">{{ sortMark("note") }}</span>
               </button>
@@ -457,17 +481,19 @@ function variantClass(variant: number) {
               >★</span
             >
           </td>
-          <td
-            class="name-cell suit-wiki-name"
-            title="打开灰机 Wiki"
-            @click="openWiki(f, $event)"
-          >
-            <span class="en">{{ displayZh(f) }}</span>
+          <td class="name-cell">
             <span
-              v-if="displayEn(f) && displayEn(f) !== displayZh(f)"
-              class="zh"
-              >{{ displayEn(f) }}</span
+              class="wiki-name"
+              title="打开灰机 Wiki"
+              @click="openWiki(f, $event)"
             >
+              <span class="en">{{ displayZh(f) }}</span>
+              <span
+                v-if="displayEn(f) && displayEn(f) !== displayZh(f)"
+                class="zh"
+                >{{ displayEn(f) }}</span
+              >
+            </span>
           </td>
           <td>
             <span
@@ -530,21 +556,12 @@ function variantClass(variant: number) {
             >
           </td>
           <td>
-            <span
-              class="check"
-              :class="{ on: !!f.formaDone }"
-              data-toggle="forma"
-              @click="onToggle('forma', f, $event)"
-              >✓</span
-            >
-          </td>
-          <td>
             <span class="note" :title="f.note || ''">{{ f.note || "—" }}</span>
           </td>
         </tr>
         <tr v-if="rows.length === 0">
           <td
-            :colspan="showHelminthCol ? 9 : 8"
+            :colspan="showHelminthCol ? 8 : 7"
             style="padding: 24px; color: var(--text-mute)"
           >无匹配</td>
         </tr>
@@ -568,13 +585,6 @@ function variantClass(variant: number) {
 }
 .cluster-start:first-child td {
   border-top: none;
-}
-.suit-wiki-name {
-  cursor: pointer;
-}
-.suit-wiki-name:hover .en {
-  color: var(--cyan);
-  text-decoration: underline;
 }
 .pill.base {
   opacity: 0.85;

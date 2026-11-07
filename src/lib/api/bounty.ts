@@ -28,15 +28,43 @@ export interface BountyBoardDto {
 /** 与 Rust `BountyBriefApi` 同形。 */
 export interface BountyBriefDto {
   boards: BountyBoardDto[];
+  /** 奖励展示名 → 库存状态。只有 MOD 和蓝图。 */
+  rewardMarks?: Record<string, string>;
 }
 
 /** @deprecated 旧名；请用 {@link BountyBriefDto}（对应 Rust `BountyBriefApi`）。 */
 export type BountyBriefApi = BountyBriefDto;
 
+export interface SyndicateWatch {
+  tag: string;
+  jobs: string[];
+  rewards: string[];
+  challenges: string[];
+}
+
+export interface WatchChoice {
+  id: string;
+  label: string;
+  /** MOD / 蓝图的库存状态。其它项没有。 */
+  mark?: string | null;
+}
+
+export interface SyndicateWatchCatalog {
+  tag: string;
+  name: string;
+  jobs: WatchChoice[];
+  rewards: WatchChoice[];
+  challenges: WatchChoice[];
+}
+
 export interface BountyWatchPrefs {
-  followedSyndicates: string[];
-  followedJobKinds: string[];
+  watches: SyndicateWatch[];
   lastNotified: string[];
+}
+
+export interface BountyWatchView {
+  prefs: BountyWatchPrefs;
+  catalog: SyndicateWatchCatalog[];
 }
 
 /** 各势力声望等级（0–5），存 user 库。 */
@@ -66,7 +94,7 @@ export function getBountyBrief() {
 }
 
 export function getBountyWatch() {
-  return invoke<BountyWatchPrefs>("get_bounty_watch_cmd");
+  return invoke<BountyWatchView>("get_bounty_watch_cmd");
 }
 
 export function setBountyWatch(prefs: BountyWatchPrefs) {

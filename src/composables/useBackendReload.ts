@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted, type Ref } from "vue";
-import { pushBountyAlerts } from "./useAppToasts";
+import { pushBountyAlerts, pushFissureAlerts } from "./useAppToasts";
 
 /**
  * 订阅 Rust 后台 `backend://*` 事件 → bump token / 重载本地列表。
@@ -87,6 +87,18 @@ export function useBackendReload(opts: {
               pushBountyAlerts(list);
             }
           }),
+        );
+        unsubs.push(
+          await listen<Array<{ body: string; expiry: string | null }>>(
+            "backend://fissure-alert",
+            (ev) => {
+              const list = ev.payload;
+              if (Array.isArray(list) && list.length > 0) {
+                opts.liveRefreshToken.value += 1;
+                pushFissureAlerts(list);
+              }
+            },
+          ),
         );
       } catch {
         /* 无事件 API 时忽略（纯浏览器预览等） */

@@ -6,6 +6,7 @@ import type {
   WarframeListItem,
   WeaponFamilyListItem,
 } from "../lib/api";
+import type { WishRow } from "../lib/wish";
 import ProgressPanel from "./ProgressPanel.vue";
 import RoutinePanel from "./RoutinePanel.vue";
 import TodoPanel from "./TodoPanel.vue";
@@ -27,6 +28,7 @@ defineEmits<{
   openWeapon: [familyId: string, weaponId: string];
   openMod: [modId: string];
   openArcane: [arcaneId: string];
+  unwish: [row: WishRow];
 }>();
 </script>
 
@@ -48,6 +50,7 @@ defineEmits<{
       @open-weapon="(fid, wid) => $emit('openWeapon', fid, wid)"
       @open-mod="(id) => $emit('openMod', id)"
       @open-arcane="(id) => $emit('openArcane', id)"
+      @unwish="(row) => $emit('unwish', row)"
     />
     <RoutinePanel
       v-if="section === 'overview' || section === 'daily'"

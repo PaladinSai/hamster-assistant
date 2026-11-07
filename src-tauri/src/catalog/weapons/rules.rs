@@ -105,6 +105,40 @@ pub fn weapon_part_meta(name: &str) -> Option<WeaponPartMeta> {
     })
 }
 
+/// 配方里要入库的铸造件：`/WeaponParts/` 或蓝图。
+/// 双持枪引用的另一把枪本体（`/Lotus/Weapons/...`）不是遗物部件，不收。
+pub(crate) fn is_recipe_craft_part(c: &WfcdWeaponComponent) -> bool {
+    if is_material_component(c) {
+        return false;
+    }
+    let uniq = c.unique_name.as_deref().unwrap_or("").trim();
+    if uniq.is_empty() {
+        return false;
+    }
+    let leaf = uniq.rsplit('/').next().unwrap_or("");
+    uniq.contains("/WeaponParts/") || leaf.ends_with("Blueprint")
+}
+
+/// 入库时的临时键。后缀表认得出就用它；否则用路径叶子的稳定短名。
+/// 遗物对齐后再按奖励英文名改键、按译名改中文。
+pub(crate) fn provisional_part_label(name: &str, unique_name: &str) -> (String, i32, String) {
+    if let Some(meta) = weapon_part_meta(name) {
+        return (meta.key.to_string(), meta.sort, meta.name_zh.to_string());
+    }
+    let leaf = unique_name.rsplit('/').next().unwrap_or("part");
+    let key: String = leaf
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    let key = if key.is_empty() {
+        "part".to_string()
+    } else {
+        key
+    };
+    (key, 50, leaf.to_string())
+}
+
 /// 家族键与变体码。
 pub fn weapon_family_and_variant(name: &str) -> (String, i32) {
     let n = name.trim();

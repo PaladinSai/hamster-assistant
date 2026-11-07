@@ -355,18 +355,26 @@ fn import_in_tx(
             // 对账键：战甲 uniqueName + part_key
             let part_map_key = format!("{}#{}", row.wf.unique_name, pkey);
 
+            let comp_unique = comp
+                .unique_name
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
             if let Some(pid) = part_ids.get(&part_map_key) {
                 tx.execute(
-                    "UPDATE warframe_part SET warframe_id=?2, part_key=?3, name_zh=?4, sort_order=?5 WHERE id=?1",
-                    params![pid, warframe_id, pkey, name_zh, sort],
+                    "UPDATE warframe_part
+                     SET warframe_id=?2, part_key=?3, name_zh=?4, sort_order=?5, unique_name=?6
+                     WHERE id=?1",
+                    params![pid, warframe_id, pkey, name_zh, sort, comp_unique],
                 )
                 .map_err(|e| format!("更新部件 {part_map_key} 失败: {e}"))?;
             } else {
                 let pid = snowflake.next_id();
                 tx.execute(
-                    "INSERT INTO warframe_part (id, warframe_id, part_key, name_zh, sort_order)
-                     VALUES (?1, ?2, ?3, ?4, ?5)",
-                    params![pid, warframe_id, pkey, name_zh, sort],
+                    "INSERT INTO warframe_part
+                     (id, warframe_id, part_key, name_zh, sort_order, unique_name)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![pid, warframe_id, pkey, name_zh, sort, comp_unique],
                 )
                 .map_err(|e| format!("插入部件 {part_map_key} 失败: {e}"))?;
                 part_ids.insert(part_map_key, pid);
@@ -468,7 +476,7 @@ fn load_warframe_map(tx: &Transaction<'_>) -> Result<HashMap<String, i64>, Strin
 }
 
 fn load_part_map(tx: &Transaction<'_>) -> Result<HashMap<String, i64>, String> {
-    // 部件表没有 unique_name 列；用 warframe.unique_name + part_key 合成对账需要额外存储。
+    // 对账键是战甲 uniqueName + part_key，和进度行共用同一部件 id。
     // P1：通过 join 重建「合成键」仅用于同一次导入的 upsert；跨次导入靠 warframe_id+part_key UNIQUE。
     let mut stmt = tx
         .prepare(

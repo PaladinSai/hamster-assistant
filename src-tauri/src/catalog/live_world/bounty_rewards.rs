@@ -79,6 +79,40 @@ const REWARD_ALIASES: &[(&str, &str)] = &[
     ("ByteRyte", "字节卫士"),
 ];
 
+/// 该势力赏金表里全部可能掉落（各轮换、各档），中文名去重。
+pub(crate) fn list_watch_reward_labels(
+    data_dir: &Path,
+    tag: &str,
+    zh: Option<&ZhLookup>,
+) -> Vec<String> {
+    if let Some(labels) = super::localize_bounty::static_bounty_reward_labels(tag) {
+        return labels;
+    }
+    let Some(tables) = cached_drop_bounty_tables(data_dir) else {
+        return Vec::new();
+    };
+    let userdict = bundled_userdict();
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for tier in tiers_for_tag(tables, tag) {
+        let level = tier.bounty_level.to_ascii_lowercase();
+        if level.contains("isolation") || level.contains("arcana") || level.contains("vault") {
+            continue;
+        }
+        for list in tier.rewards.values() {
+            for it in list {
+                let label = localize_reward_name(&it.item_name, zh, userdict);
+                if label.is_empty() || !seen.insert(label.clone()) {
+                    continue;
+                }
+                out.push(label);
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
 /// 为赏金板任务填充 `rewards`（英文名 → 尽量中文化）。
 pub(crate) fn attach_drop_rewards(
     data_dir: &Path,

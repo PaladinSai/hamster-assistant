@@ -1,14 +1,19 @@
 /** 与设计文档 11 状态码表一致 */
 
-export type FilterKey =
-  | "all"
-  | "helminth"
-  | "rebirth"
-  | "farmable"
-  | "noPrime"
-  | "noBase"
-  | "unforma"
-  | "unmastered";
+export type FilterKey = "all" | "base" | "prime" | "helminth" | "unmastered";
+
+/** Prime 行下的入库筛选。未选 Prime 时不生效。 */
+export type WarframeVaultFilter = "all" | "unvaulted" | "vaulted" | "resurgence";
+
+export const WARFRAME_VAULT_FILTER_OPTS: {
+  key: WarframeVaultFilter;
+  label: string;
+}[] = [
+  { key: "all", label: "全部" },
+  { key: "unvaulted", label: "未入库" },
+  { key: "vaulted", label: "已入库" },
+  { key: "resurgence", label: "重生中" },
+];
 
 /** 进度状态筛选，与场景 FilterKey 独立、同时 AND */
 export type WarframeStatusFilter = "all" | 0 | 1 | 2 | 3;

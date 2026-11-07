@@ -5,7 +5,7 @@ use std::path::Path;
 use chrono::Utc;
 use rusqlite::OptionalExtension;
 
-use crate::db::{self, open_catalog};
+use crate::db::{self, open_catalog, open_user};
 use crate::id::Snowflake;
 
 use super::store_bounty;
@@ -35,13 +35,27 @@ pub fn get_bounty_brief(
 ) -> Result<BountyBriefApi, String> {
     db::init_databases(data_dir)?;
     let catalog = open_catalog(&db::catalog_path(data_dir))?;
-    read_bounty_brief(&catalog)
+    let mut brief = read_bounty_brief(&catalog)?;
+    let user = open_user(&db::user_path(data_dir))?;
+    let index = super::reward_inventory::reward_mark_index(&catalog, &user)?;
+    let labels: Vec<String> = brief
+        .boards
+        .iter()
+        .flat_map(|board| board.jobs.iter())
+        .flat_map(|job| job.rewards.iter().cloned())
+        .collect();
+    brief.reward_marks = super::reward_inventory::marks_for_labels(&index, &labels);
+    Ok(brief)
 }
 
 pub fn get_fissure_brief(
     data_dir: &Path,
     _snowflake: &Snowflake,
 ) -> Result<FissureBriefDto, String> {
+    load_fissure_brief(data_dir)
+}
+
+pub(crate) fn load_fissure_brief(data_dir: &Path) -> Result<FissureBriefDto, String> {
     db::init_databases(data_dir)?;
     let catalog = open_catalog(&db::catalog_path(data_dir))?;
     read_fissures(&catalog)
@@ -73,6 +87,7 @@ fn read_fissures(catalog: &rusqlite::Connection) -> Result<FissureBriefDto, Stri
     let now = Utc::now().to_rfc3339();
     for row in rows {
         let mut f = row.map_err(|e| e.to_string())?;
+        f.mission_type = super::localize::canon_fissure_mission_zh(&f.mission_type);
         // 跳过已过期（仍保留未到点的）
         if let Some(ref exp) = f.expiry {
             if exp.as_str() < now.as_str() {
