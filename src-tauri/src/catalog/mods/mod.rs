@@ -15,7 +15,7 @@ mod tests {
     use super::*;
     use super::filter::{
         is_incomplete_primed_stub, is_primed_mod, is_unreleased_mod, map_mod_kind, should_skip_mod,
-        should_skip_wfcd_mod,
+        should_skip_wfcd_mod, unique_names_to_keep,
     };
     use super::source::{build_source_map, offer_source, source_from_drop_location};
     use super::types::WfcdMod;
@@ -39,33 +39,33 @@ mod tests {
     }
 
     #[test]
-    fn skip_beginner_expert_intermediate_unfused() {
-        assert!(should_skip_mod(
-            "Ammo Drum",
-            "/Lotus/Upgrades/Mods/Rifle/Beginner/WeaponAmmoMaxModBeginner",
-            "Primary Mod"
-        ));
-        assert!(should_skip_mod(
-            "Serration",
-            "/Lotus/Upgrades/Mods/Rifle/Expert/WeaponDamageAmountModExpert",
-            "Primary Mod"
-        ));
-        assert!(should_skip_mod(
-            "Ammo Drum",
-            "/Lotus/Upgrades/Mods/Rifle/Intermediate/x",
-            "Primary Mod"
-        ));
+    fn skip_flawed_and_unfused_keep_rank_folders_for_batch() {
         assert!(should_skip_mod(
             "Unfused Artifact",
             "/Lotus/Upgrades/Mods/Unfused/Artifact",
             "Warframe Mod"
+        ));
+        // 等级目录要等整表看有没有同名正式卡，单条不丢。
+        assert!(!should_skip_mod(
+            "Ammo Drum",
+            "/Lotus/Upgrades/Mods/Rifle/Beginner/WeaponAmmoMaxModBeginner",
+            "Primary Mod"
+        ));
+        assert!(!should_skip_mod(
+            "Serration",
+            "/Lotus/Upgrades/Mods/Rifle/Expert/WeaponDamageAmountModExpert",
+            "Primary Mod"
+        ));
+        assert!(!should_skip_mod(
+            "Ammo Drum",
+            "/Lotus/Upgrades/Mods/Rifle/Intermediate/x",
+            "Primary Mod"
         ));
         assert!(!should_skip_mod(
             "Ammo Drum",
             "/Lotus/Upgrades/Mods/Rifle/WeaponAmmoMaxMod",
             "Primary Mod"
         ));
-        // Primed 也常走 /Expert/，不能跳过
         assert!(!should_skip_mod(
             "Primed Continuity",
             "/Lotus/Upgrades/Mods/Warframe/Expert/AvatarAbilityDurationPowerMod",
@@ -230,6 +230,121 @@ CREATE TABLE mod (
             .query_row("SELECT COUNT(*) FROM mod", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 1, "本轮未出现的 Serration 应被删掉");
+    }
+
+    fn mod_table(conn: &mut rusqlite::Connection) {
+        conn.execute_batch(
+            r#"
+CREATE TABLE name_i18n (name_en TEXT NOT NULL PRIMARY KEY, name_zh_userdict TEXT, name_zh_wfcd TEXT, updated_at TEXT);
+CREATE TABLE mod (
+  id INTEGER NOT NULL PRIMARY KEY,
+  unique_name TEXT NOT NULL UNIQUE,
+  name_en TEXT NOT NULL,
+  name_zh TEXT,
+  mod_kind INTEGER NOT NULL DEFAULT 7,
+  source_kind INTEGER NOT NULL DEFAULT 0,
+  is_prime INTEGER NOT NULL DEFAULT 0,
+  is_augment INTEGER NOT NULL DEFAULT 0,
+  polarity TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+"#,
+        )
+        .unwrap();
+    }
+
+    fn has_unique(conn: &rusqlite::Connection, unique_name: &str) -> bool {
+        conn.query_row(
+            "SELECT COUNT(*) FROM mod WHERE unique_name = ?1",
+            [unique_name],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap()
+            == 1
+    }
+
+    #[test]
+    fn import_keeps_real_cards_and_drops_duplicates() {
+        let mods = serde_json::json!([
+            {"name":"Galvanized Elementalist","uniqueName":"/Lotus/Upgrades/Mods/Melee/Expert/WeaponMeleeStatusChanceSPMod","type":"Melee Mod","compatName":"Melee","releaseDate":"2024-10-02"},
+            {"name":"Galvanized Reflex","uniqueName":"/Lotus/Upgrades/Mods/Melee/Expert/WeaponHeavyAttackEfficiencySPMod","type":"Melee Mod","compatName":"Melee","releaseDate":"2024-10-02"},
+            {"name":"Galvanized Steel","uniqueName":"/Lotus/Upgrades/Mods/Melee/Expert/WeaponCritChanceSPMod","type":"Melee Mod","compatName":"Melee","releaseDate":"2024-10-02"},
+            {"name":"Maglev","uniqueName":"/Lotus/Upgrades/Mods/Warframe/Beginner/AvatarSlideBoostModBeginner","type":"Warframe Mod","compatName":"WARFRAME","releaseDate":"2014-07-18","wikiaUrl":"https://wiki.warframe.com/w/Maglev"},
+            {"name":"Quick Thinking","uniqueName":"/Lotus/Upgrades/Mods/Warframe/Beginner/AvatarPowerToHealthOnDeathModBeginner","type":"Warframe Mod","compatName":"WARFRAME","releaseDate":"2014-07-18","wikiaUrl":"https://wiki.warframe.com/w/Quick_Thinking"},
+            {"name":"Reflex Coil","uniqueName":"/Lotus/Upgrades/Mods/Melee/WeaponMeleeChargeRateMod","type":"Melee Mod","compatName":"Melee","releaseDate":"2012-10-25"},
+            {"name":"Reflex Coil","uniqueName":"/Lotus/Upgrades/Mods/Melee/Expert/WeaponMeleeChannelingEfficiencyModExpert","type":"Melee Mod","compatName":"Melee","releaseDate":"2012-10-25"},
+            {"name":"Pressure Point","uniqueName":"/Lotus/Upgrades/Mods/Melee/WeaponMeleeDamageMod","type":"Melee Mod","compatName":"Melee","releaseDate":"2012-10-25"},
+            {"name":"Pressure Point","uniqueName":"/Lotus/Upgrades/Mods/Melee/Beginner/WeaponMeleeDamageModBeginner","type":"Melee Mod","compatName":"Melee","releaseDate":"2014-07-18"},
+            {"name":"Pressure Point","uniqueName":"/Lotus/Upgrades/Mods/Melee/WeaponMeleeDamageOnHeavyKillMod","type":"Melee Mod","compatName":"Melee","releaseDate":"2012-10-25"},
+            {"name":"Adaptation","uniqueName":"/Lotus/Upgrades/Mods/Warframe/AvatarResistanceOnDamageMod","type":"Warframe Mod","compatName":"WARFRAME","releaseDate":"2018-10-12"},
+            {"name":"Adaptation","uniqueName":"/Lotus/Upgrades/Mods/Nemesis/AvatarSentientArmourMod","type":"Warframe Mod","compatName":"WARFRAME","releaseDate":"2018-10-12"},
+            {"name":"Health Conversion","uniqueName":"/Lotus/Upgrades/Mods/Warframe/HealthPickupGivesArmourMod","type":"Warframe Mod","compatName":"WARFRAME","releaseDate":"2016-03-04"},
+            {"name":"Health Conversion","uniqueName":"/Lotus/Upgrades/Tau/HealthPickupGivesArmourMax","type":"Warframe Mod","compatName":"WARFRAME","releaseDate":"2016-03-04"},
+            {"name":"Augursetmod","uniqueName":"/Lotus/Upgrades/Mods/Sets/Augur/AugurSetMod","type":"Mod Set Mod"},
+            {"name":"Air Martial","uniqueName":"/Lotus/Upgrades/Mods/PvPMods/Melee/AirborneMeleeAutoTargetBonus","type":"Melee Mod","compatName":"Melee"},
+            {"name":"Cannonade","uniqueName":"/Lotus/Upgrades/Mods/Pistol/ProjectileExplosionChanceMod","type":"Secondary Mod","compatName":"Pistol","excludeFromCodex":true},
+            {"name":"Helminth Ferocity","uniqueName":"/Lotus/Upgrades/Mods/Sentinel/Kubrow/ChargerFinisherMod","type":"Companion Mod","compatName":"Helminth Charger","codexSecret":true},
+            {"name":"Ferocity","uniqueName":"/Lotus/Upgrades/Mods/Sentinel/Kubrow/KubrowFinisherMod","type":"Companion Mod","compatName":"Sahasa Kubrow","releaseDate":"2014-07-18","wikiaUrl":"https://wiki.warframe.com/w/Ferocity"},
+            {"name":"Primed Continuity","uniqueName":"/Lotus/Upgrades/Mods/Warframe/Expert/AvatarAbilityDurationPowerMod","type":"Warframe Mod","isPrime":true,"releaseDate":"2014-12-12","wikiaUrl":"https://wiki.warframe.com/w/Primed_Continuity"},
+            {"name":"Necramech Vitality","uniqueName":"/Lotus/Upgrades/Mods/Necromech/NecromechVitalityMod","type":"Necramech Mod","releaseDate":"2020-08-25"},
+            {"name":"Necramech Stamina","uniqueName":"/Lotus/Upgrades/Mods/Necromech/NecromechSprintEfficiencyMod","type":"Necramech Mod","excludeFromCodex":true},
+            {"name":"Fizzbang Flourish","uniqueName":"/Lotus/Upgrades/Mods/Hoverboard/HBFireWorksMod","type":"K-Drive Mod","excludeFromCodex":true}
+        ]);
+        let parsed: Vec<WfcdMod> = serde_json::from_value(mods.clone()).unwrap();
+        let keep = unique_names_to_keep(&parsed);
+        assert!(keep.contains("/Lotus/Upgrades/Mods/Melee/Expert/WeaponMeleeStatusChanceSPMod"));
+        assert!(keep.contains("/Lotus/Upgrades/Mods/Melee/Expert/WeaponHeavyAttackEfficiencySPMod"));
+        assert!(keep.contains("/Lotus/Upgrades/Mods/Melee/Expert/WeaponCritChanceSPMod"));
+        assert!(keep.contains("/Lotus/Upgrades/Mods/Warframe/Beginner/AvatarSlideBoostModBeginner"));
+        assert!(keep.contains(
+            "/Lotus/Upgrades/Mods/Warframe/Beginner/AvatarPowerToHealthOnDeathModBeginner"
+        ));
+        assert!(!keep.contains(
+            "/Lotus/Upgrades/Mods/Melee/Expert/WeaponMeleeChannelingEfficiencyModExpert"
+        ));
+        assert!(keep.contains("/Lotus/Upgrades/Mods/Melee/WeaponMeleeDamageMod"));
+        assert!(!keep.contains("/Lotus/Upgrades/Mods/Melee/Beginner/WeaponMeleeDamageModBeginner"));
+        assert!(!keep.contains("/Lotus/Upgrades/Mods/Melee/WeaponMeleeDamageOnHeavyKillMod"));
+        assert!(keep.contains("/Lotus/Upgrades/Mods/Warframe/AvatarResistanceOnDamageMod"));
+        assert!(!keep.contains("/Lotus/Upgrades/Mods/Nemesis/AvatarSentientArmourMod"));
+        assert!(keep.contains("/Lotus/Upgrades/Mods/Warframe/HealthPickupGivesArmourMod"));
+        assert!(!keep.contains("/Lotus/Upgrades/Tau/HealthPickupGivesArmourMax"));
+        assert!(!keep.contains("/Lotus/Upgrades/Mods/Sets/Augur/AugurSetMod"));
+        assert!(!keep.contains("/Lotus/Upgrades/Mods/PvPMods/Melee/AirborneMeleeAutoTargetBonus"));
+        assert!(!keep.contains("/Lotus/Upgrades/Mods/Pistol/ProjectileExplosionChanceMod"));
+        assert!(!keep.contains("/Lotus/Upgrades/Mods/Sentinel/Kubrow/ChargerFinisherMod"));
+        assert!(keep.contains("/Lotus/Upgrades/Mods/Sentinel/Kubrow/KubrowFinisherMod"));
+        assert!(keep.contains("/Lotus/Upgrades/Mods/Warframe/Expert/AvatarAbilityDurationPowerMod"));
+        assert!(keep.contains("/Lotus/Upgrades/Mods/Necromech/NecromechVitalityMod"));
+        assert!(!keep.contains("/Lotus/Upgrades/Mods/Necromech/NecromechSprintEfficiencyMod"));
+        assert!(!keep.contains("/Lotus/Upgrades/Mods/Hoverboard/HBFireWorksMod"));
+
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        mod_table(&mut conn);
+        let snowflake = crate::id::Snowflake::new(1);
+        let body = serde_json::to_vec(&mods).unwrap();
+        let stats = import_mods_json(&mut conn, &body, br"{}", &snowflake).unwrap();
+        assert_eq!(stats.mods, keep.len());
+        assert!(has_unique(
+            &conn,
+            "/Lotus/Upgrades/Mods/Melee/WeaponMeleeDamageMod"
+        ));
+        assert!(!has_unique(
+            &conn,
+            "/Lotus/Upgrades/Mods/Melee/WeaponMeleeDamageOnHeavyKillMod"
+        ));
+        assert!(has_unique(
+            &conn,
+            "/Lotus/Upgrades/Mods/Warframe/Beginner/AvatarSlideBoostModBeginner"
+        ));
+        assert!(!has_unique(
+            &conn,
+            "/Lotus/Upgrades/Mods/Sets/Augur/AugurSetMod"
+        ));
+        assert!(!has_unique(
+            &conn,
+            "/Lotus/Upgrades/Mods/Sentinel/Kubrow/ChargerFinisherMod"
+        ));
     }
 
     #[test]

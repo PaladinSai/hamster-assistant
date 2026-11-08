@@ -44,7 +44,8 @@ ${StrLoc}
 
 !define MANUFACTURER "{{manufacturer}}"
 !define PRODUCTNAME "{{product_name}}"
-!define DISPLAYNAME "仓鼠小助手"
+!define DISPLAYNAME "星际仓鼠小助手"
+!define OLD_DISPLAYNAME "仓鼠小助手"
 !define VERSION "{{version}}"
 !define VERSIONWITHBUILD "{{version_with_build}}"
 !define HOMEPAGE "{{homepage}}"
@@ -81,6 +82,7 @@ Var UpdateMode
 Var NoShortcutMode
 Var WixMode
 Var OldMainBinaryName
+Var RenamedShortcut
 
 Name "${PRODUCTNAME}"
 BrandingText "${COPYRIGHT}"
@@ -851,11 +853,24 @@ Section Uninstall
  Delete "$SMPROGRAMS\$AppStartMenuFolder\${DISPLAYNAME}.lnk"
  RMDir "$SMPROGRAMS\$AppStartMenuFolder"
  ${EndIf}
+ !insertmacro IsShortcutTarget "$SMPROGRAMS\$AppStartMenuFolder\${OLD_DISPLAYNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+ Pop $0
+ ${If} $0 = 1
+ !insertmacro UnpinShortcut "$SMPROGRAMS\$AppStartMenuFolder\${OLD_DISPLAYNAME}.lnk"
+ Delete "$SMPROGRAMS\$AppStartMenuFolder\${OLD_DISPLAYNAME}.lnk"
+ RMDir "$SMPROGRAMS\$AppStartMenuFolder"
+ ${EndIf}
  !insertmacro IsShortcutTarget "$SMPROGRAMS\${DISPLAYNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
  Pop $0
  ${If} $0 = 1
  !insertmacro UnpinShortcut "$SMPROGRAMS\${DISPLAYNAME}.lnk"
  Delete "$SMPROGRAMS\${DISPLAYNAME}.lnk"
+ ${EndIf}
+ !insertmacro IsShortcutTarget "$SMPROGRAMS\${OLD_DISPLAYNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+ Pop $0
+ ${If} $0 = 1
+ !insertmacro UnpinShortcut "$SMPROGRAMS\${OLD_DISPLAYNAME}.lnk"
+ Delete "$SMPROGRAMS\${OLD_DISPLAYNAME}.lnk"
  ${EndIf}
 
  ; Remove desktop shortcuts
@@ -864,6 +879,12 @@ Section Uninstall
  ${If} $0 = 1
  !insertmacro UnpinShortcut "$DESKTOP\${DISPLAYNAME}.lnk"
  Delete "$DESKTOP\${DISPLAYNAME}.lnk"
+ ${EndIf}
+ !insertmacro IsShortcutTarget "$DESKTOP\${OLD_DISPLAYNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+ Pop $0
+ ${If} $0 = 1
+ !insertmacro UnpinShortcut "$DESKTOP\${OLD_DISPLAYNAME}.lnk"
+ Delete "$DESKTOP\${OLD_DISPLAYNAME}.lnk"
  ${EndIf}
  ${EndIf}
 
@@ -953,9 +974,31 @@ Function CreateOrUpdateStartMenuShortcut
  Return
  ${EndIf}
 
+ ; 显示名从「仓鼠小助手」改成「星际仓鼠小助手」。更新模式会跳过创建快捷方式，
+ ; 所以旧快捷方式指向本安装目录时先删掉，再继续建新名快捷方式。
+ StrCpy $RenamedShortcut 0
+ !if "${STARTMENUFOLDER}" != ""
+ !insertmacro IsShortcutTarget "$SMPROGRAMS\$AppStartMenuFolder\${OLD_DISPLAYNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+ Pop $0
+ ${If} $0 = 1
+ !insertmacro UnpinShortcut "$SMPROGRAMS\$AppStartMenuFolder\${OLD_DISPLAYNAME}.lnk"
+ Delete "$SMPROGRAMS\$AppStartMenuFolder\${OLD_DISPLAYNAME}.lnk"
+ StrCpy $RenamedShortcut 1
+ ${EndIf}
+ !else
+ !insertmacro IsShortcutTarget "$SMPROGRAMS\${OLD_DISPLAYNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+ Pop $0
+ ${If} $0 = 1
+ !insertmacro UnpinShortcut "$SMPROGRAMS\${OLD_DISPLAYNAME}.lnk"
+ Delete "$SMPROGRAMS\${OLD_DISPLAYNAME}.lnk"
+ StrCpy $RenamedShortcut 1
+ ${EndIf}
+ !endif
+
  ; Skip creating shortcut if in update mode or no shortcut mode
- ; but always create if migrating from wix
+ ; but always create if migrating from wix or from the old display name
  ${If} $WixMode = 0
+ ${AndIf} $RenamedShortcut = 0
  ${If} $UpdateMode = 1
  ${OrIf} $NoShortcutMode = 1
  Return
@@ -982,9 +1025,20 @@ Function CreateOrUpdateDesktopShortcut
  Return
  ${EndIf}
 
+ ; 显示名从「仓鼠小助手」改成「星际仓鼠小助手」。更新模式也会建新桌面快捷方式。
+ StrCpy $RenamedShortcut 0
+ !insertmacro IsShortcutTarget "$DESKTOP\${OLD_DISPLAYNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+ Pop $0
+ ${If} $0 = 1
+ !insertmacro UnpinShortcut "$DESKTOP\${OLD_DISPLAYNAME}.lnk"
+ Delete "$DESKTOP\${OLD_DISPLAYNAME}.lnk"
+ StrCpy $RenamedShortcut 1
+ ${EndIf}
+
  ; Skip creating shortcut if in update mode or no shortcut mode
- ; but always create if migrating from wix
+ ; but always create if migrating from wix or from the old display name
  ${If} $WixMode = 0
+ ${AndIf} $RenamedShortcut = 0
  ${If} $UpdateMode = 1
  ${OrIf} $NoShortcutMode = 1
  Return

@@ -76,3 +76,12 @@ export function huijiSuitWikiUrl(
 ): string {
   return huijiWikiUrl(huijiSuitPageTitle(nameZh, nameEn));
 }
+
+/** MOD 灰机链接：优先简中，否则英文；空白直接去掉，不换成下划线。 */
+export function huijiModWikiUrl(
+  nameZh: string | null | undefined,
+  nameEn: string,
+): string {
+  const raw = nameZh?.trim() || nameEn.trim();
+  return huijiWikiUrl(raw.replace(/\s+/g, ""));
+}

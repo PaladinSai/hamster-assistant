@@ -33,7 +33,7 @@ pub struct ModImportStats {
     pub skipped: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub(crate) struct WfcdIntroduced {
     #[serde(default)]
     pub(crate) name: Option<String>,
@@ -41,7 +41,7 @@ pub(crate) struct WfcdIntroduced {
     pub(crate) date: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub(crate) struct WfcdMod {
     pub(crate) name: String,
     #[serde(rename = "uniqueName")]
@@ -68,6 +68,14 @@ pub(crate) struct WfcdMod {
     #[serde(default)]
     #[serde(rename = "wikiaUrl")]
     pub(crate) wikia_url: Option<String>,
+    /// 游戏图鉴不收录（竞拍、已撤卡、滑板彩蛋等）。
+    #[serde(default)]
+    #[serde(rename = "excludeFromCodex")]
+    pub(crate) exclude_from_codex: bool,
+    /// 图鉴隐藏。没有发布日也没有百科时，视为过时内部卡。
+    #[serde(default)]
+    #[serde(rename = "codexSecret")]
+    pub(crate) codex_secret: bool,
 }
 
 pub(crate) fn name_key(name: &str) -> String {

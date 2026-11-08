@@ -1,4 +1,4 @@
-# 仓鼠小助手
+# 星际仓鼠小助手
 
 Warframe 收藏管理桌面工具（Tauri 2 + Vue 3 + TypeScript + SQLite）。
 
@@ -26,7 +26,7 @@ npm run build          # 仅前端
 npm run tauri -- build --bundles nsis   # Windows 安装包
 ```
 
-安装包 / 安装目录名为英文 `Hamster Assistant`（避免 CI 丢中文文件名）；开始菜单、桌面快捷方式与「应用和功能」通过自定义 NSIS 模板显示「仓鼠小助手」，窗口标题仍为中文。
+安装包 / 安装目录名为英文 `Hamster Assistant`（避免 CI 丢中文文件名）；开始菜单、桌面快捷方式与「应用和功能」通过自定义 NSIS 模板显示「星际仓鼠小助手」，窗口标题仍为中文。
 
 ## 自动更新（维护者）
 

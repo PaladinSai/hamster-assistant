@@ -371,9 +371,9 @@ onUnmounted(() => {
   <div class="app" :class="{ collapsed }">
     <aside class="rail">
       <div class="brand">
-        <div class="brand-mark">仓</div>
+        <div class="brand-mark">星</div>
         <div class="brand-text">
-          <strong>仓鼠小助手</strong>
+          <strong>星际仓鼠小助手</strong>
           <span>Warframe 收藏管理</span>
         </div>
       </div>

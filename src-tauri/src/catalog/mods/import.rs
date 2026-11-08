@@ -8,9 +8,7 @@ use serde_json::Value;
 use crate::catalog::i18n::ZhLookup;
 use crate::id::Snowflake;
 
-use super::filter::{
-    is_primed_mod, map_mod_kind, should_skip_wfcd_mod,
-};
+use super::filter::{is_primed_mod, map_mod_kind, should_skip_wfcd_mod, unique_names_to_keep};
 use super::source::{build_source_map, source_from_mod_drops};
 use super::types::*;
 
@@ -59,6 +57,7 @@ fn import_in_tx(
     let mut sort: i32 = 0;
     let zh = ZhLookup::load(tx)?;
 
+    let mut parsed: Vec<(i32, WfcdMod)> = Vec::new();
     for item in arr {
         // 先读 drops / name（仍持有 Value），再 move 反序列化，避免 item.clone()
         let from_map = item
@@ -74,11 +73,21 @@ fn import_in_tx(
                 continue;
             }
         };
-        let item_type = m.item_type.as_deref().unwrap_or("");
         if should_skip_wfcd_mod(&m) {
             stats.skipped += 1;
             continue;
         }
+        parsed.push((source_kind, m));
+    }
+    let cards: Vec<WfcdMod> = parsed.iter().map(|(_, card)| card.clone()).collect();
+    let keep = unique_names_to_keep(&cards);
+
+    for (source_kind, m) in parsed {
+        if !keep.contains(&m.unique_name) {
+            stats.skipped += 1;
+            continue;
+        }
+        let item_type = m.item_type.as_deref().unwrap_or("");
         let mod_kind = map_mod_kind(item_type, m.compat_name.as_deref());
         let is_prime = if m.is_prime.unwrap_or(false) || is_primed_mod(&m.name, &m.unique_name) {
             1

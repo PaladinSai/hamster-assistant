@@ -1,6 +1,8 @@
 //! WFCD Arcanes.json → catalog.`arcane`
 
-use rusqlite::{params, Connection, OptionalExtension};
+use std::collections::{HashMap, HashSet};
+
+use rusqlite::{params, Connection, Transaction};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -237,11 +239,35 @@ fn should_skip(a: &WfcdArcane) -> bool {
     if a.name.trim().is_empty() || a.unique_name.trim().is_empty() {
         return true;
     }
+    // 类型正好是 "Arcane" 的是旧外观强化占位（防蚀、保护、节制等）。
+    // 真正的卡带槽位，例如 "Warframe Arcane"。
+    if a.item_type
+        .as_deref()
+        .unwrap_or("")
+        .eq_ignore_ascii_case("Arcane")
+    {
+        return true;
+    }
     // 无 rarity 且无 drops：废案/占位
     if a.rarity.is_none() && a.drops.is_empty() {
         return true;
     }
     false
+}
+
+fn load_arcane_id_map(tx: &Transaction<'_>) -> Result<HashMap<String, i64>, String> {
+    let mut stmt = tx
+        .prepare("SELECT unique_name, id FROM arcane")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
+        .map_err(|e| e.to_string())?;
+    let mut map = HashMap::new();
+    for r in rows {
+        let (k, id) = r.map_err(|e| e.to_string())?;
+        map.insert(k, id);
+    }
+    Ok(map)
 }
 
 pub fn import_arcanes_json(
@@ -251,10 +277,12 @@ pub fn import_arcanes_json(
 ) -> Result<ArcaneImportStats, String> {
     let arr: Vec<Value> =
         serde_json::from_slice(arcanes_json).map_err(|e| format!("Arcanes.json 解析失败: {e}"))?;
-    let zh = ZhLookup::load(conn)?;
     let tx = conn
         .transaction()
         .map_err(|e| format!("赋能事务失败: {e}"))?;
+    let zh = ZhLookup::load(&tx)?;
+    let mut id_map = load_arcane_id_map(&tx)?;
+    let mut seen: HashSet<String> = HashSet::new();
 
     let mut stats = ArcaneImportStats::default();
     let mut sort = 0i32;
@@ -278,16 +306,7 @@ pub fn import_arcanes_json(
         let max_rank = max_rank_from_stats(&a.level_stats);
         let name_zh = zh.get(&a.name);
 
-        let existing: Option<i64> = tx
-            .query_row(
-                "SELECT id FROM arcane WHERE unique_name = ?1",
-                [&a.unique_name],
-                |r| r.get(0),
-            )
-            .optional()
-            .map_err(|e| e.to_string())?;
-
-        if let Some(id) = existing {
+        if let Some(&id) = id_map.get(&a.unique_name) {
             tx.execute(
                 "UPDATE arcane SET name_en=?2, name_zh=COALESCE(?3, name_zh),
                  arcane_kind=?4, rarity=?5, source_kind=?6, max_rank=?7, sort_order=?8
@@ -324,9 +343,21 @@ pub fn import_arcanes_json(
                 ],
             )
             .map_err(|e| format!("插入赋能失败: {e}"))?;
+            id_map.insert(a.unique_name.clone(), id);
         }
+        seen.insert(a.unique_name);
         sort += 1;
         stats.arcanes += 1;
+    }
+
+    let orphans: Vec<i64> = id_map
+        .iter()
+        .filter(|(uname, _)| !seen.contains(*uname))
+        .map(|(_, id)| *id)
+        .collect();
+    for id in orphans {
+        tx.execute("DELETE FROM arcane WHERE id = ?1", [id])
+            .map_err(|e| format!("删除 orphan 赋能 id={id} 失败: {e}"))?;
     }
 
     tx.commit().map_err(|e| format!("赋能提交失败: {e}"))?;
@@ -440,5 +471,110 @@ mod tests {
         assert_eq!(map_arcane_kind("Warframe Arcane"), ARCANE_KIND_WARFRAME);
         assert_eq!(map_arcane_kind("Operator Arcane"), ARCANE_KIND_OPERATOR);
         assert_eq!(map_arcane_kind("Bow Arcane"), ARCANE_KIND_OTHER);
+    }
+
+    fn sample(name: &str, unique_name: &str, item_type: &str, rarity: Option<&str>) -> WfcdArcane {
+        WfcdArcane {
+            name: name.into(),
+            unique_name: unique_name.into(),
+            item_type: Some(item_type.into()),
+            rarity: rarity.map(str::to_string),
+            exclude_from_codex: None,
+            level_stats: vec![],
+            drops: vec![],
+        }
+    }
+
+    #[test]
+    fn skip_bare_arcane_placeholders() {
+        assert!(should_skip(&sample(
+            "Arcane Protection",
+            "/Lotus/Upgrades/CosmeticEnhancers/Defensive/CorrosiveProcResist",
+            "Arcane",
+            Some("Uncommon"),
+        )));
+        assert!(should_skip(&sample(
+            "Arcane Temperance",
+            "/Lotus/Upgrades/CosmeticEnhancers/Utility/DamageReductionDuringRevive",
+            "Arcane",
+            Some("Rare"),
+        )));
+        assert!(!should_skip(&sample(
+            "Arcane Energize",
+            "/Lotus/Upgrades/CosmeticEnhancers/Offensive/EnergyOnHeadshot",
+            "Warframe Arcane",
+            Some("Legendary"),
+        )));
+    }
+
+    #[test]
+    fn import_drops_placeholder_and_keeps_id() {
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            r#"
+CREATE TABLE name_i18n (
+  name_en TEXT NOT NULL PRIMARY KEY,
+  name_zh_userdict TEXT,
+  name_zh_wfcd TEXT,
+  updated_at TEXT
+);
+CREATE TABLE arcane (
+  id INTEGER NOT NULL PRIMARY KEY,
+  unique_name TEXT NOT NULL UNIQUE,
+  name_en TEXT NOT NULL,
+  name_zh TEXT,
+  arcane_kind INTEGER NOT NULL DEFAULT 8,
+  rarity INTEGER NOT NULL DEFAULT 0,
+  source_kind INTEGER NOT NULL DEFAULT 0,
+  max_rank INTEGER NOT NULL DEFAULT 5,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO arcane (id, unique_name, name_en, name_zh)
+VALUES (7, '/Lotus/Upgrades/CosmeticEnhancers/Defensive/CorrosiveProcResist', 'Arcane Protection', '赋能·防蚀');
+"#,
+        )
+        .unwrap();
+
+        let snowflake = crate::id::Snowflake::new(1);
+        let body = br#"[
+          {"name":"Arcane Energize","uniqueName":"/Lotus/Upgrades/CosmeticEnhancers/Offensive/EnergyOnHeadshot","type":"Warframe Arcane","rarity":"Legendary","levelStats":[{},{},{},{},{},{}]},
+          {"name":"Arcane Protection","uniqueName":"/Lotus/Upgrades/CosmeticEnhancers/Defensive/CorrosiveProcResist","type":"Arcane","rarity":"Uncommon"},
+          {"name":"Arcane Shield","uniqueName":"/Lotus/Upgrades/CosmeticEnhancers/Defensive/ImpactProcResist","type":"Arcane","rarity":"Uncommon"}
+        ]"#;
+        let stats = import_arcanes_json(&mut conn, body, &snowflake).unwrap();
+        assert_eq!(stats.arcanes, 1);
+        assert_eq!(stats.skipped, 2);
+
+        let rows: Vec<(String, String)> = conn
+            .prepare("SELECT unique_name, name_en FROM arcane ORDER BY unique_name")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            rows,
+            vec![(
+                "/Lotus/Upgrades/CosmeticEnhancers/Offensive/EnergyOnHeadshot".into(),
+                "Arcane Energize".into()
+            )]
+        );
+
+        let id: i64 = conn
+            .query_row(
+                "SELECT id FROM arcane WHERE unique_name = ?1",
+                ["/Lotus/Upgrades/CosmeticEnhancers/Offensive/EnergyOnHeadshot"],
+                |r| r.get(0),
+            )
+            .unwrap();
+        import_arcanes_json(&mut conn, body, &snowflake).unwrap();
+        let id2: i64 = conn
+            .query_row(
+                "SELECT id FROM arcane WHERE unique_name = ?1",
+                ["/Lotus/Upgrades/CosmeticEnhancers/Offensive/EnergyOnHeadshot"],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(id, id2);
     }
 }

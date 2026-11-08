@@ -11,6 +11,7 @@ import {
   type ModProgressFilter,
   type ModTagFilter,
 } from "../lib/status";
+import { huijiModWikiUrl } from "../lib/wiki/huiji";
 import { useColumnSort } from "../composables/useColumnSort";
 import { useConfirm } from "../composables/useConfirm";
 import { useNoteDrafts } from "../composables/useNoteDrafts";
@@ -209,9 +210,7 @@ function displayName(m: ModListItem) {
 }
 
 function modWikiUrl(m: ModListItem) {
-  const page = (m.nameZh?.trim() || m.nameEn.trim()).replace(/ /g, "_");
-  if (!page) return "";
-  return `https://warframe.huijiwiki.com/wiki/${encodeURIComponent(page)}`;
+  return huijiModWikiUrl(m.nameZh, m.nameEn);
 }
 
 async function openWiki(m: ModListItem, e: Event) {
