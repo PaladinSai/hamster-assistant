@@ -1,5 +1,9 @@
 import { onMounted, onUnmounted, type Ref } from "vue";
-import { pushBountyAlerts, pushFissureAlerts } from "./useAppToasts";
+import {
+  pushBountyAlerts,
+  pushFissureAlerts,
+  type BountyAlertPayload,
+} from "./useAppToasts";
 
 /**
  * 订阅 Rust 后台 `backend://*` 事件 → bump token / 重载本地列表。
@@ -78,9 +82,7 @@ export function useBackendReload(opts: {
           }),
         );
         unsubs.push(
-          await listen<
-            Array<{ body: string; expiry: string | null; tag?: string | null }>
-          >("backend://bounty-alert", (ev) => {
+          await listen<BountyAlertPayload[]>("backend://bounty-alert", (ev) => {
             const list = ev.payload;
             if (Array.isArray(list) && list.length > 0) {
               opts.liveRefreshToken.value += 1;
