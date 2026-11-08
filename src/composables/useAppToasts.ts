@@ -19,6 +19,7 @@ export interface AppToast {
 }
 
 export interface BountyAlertPayload {
+  title: string;
   body: string;
   expiry: string | null;
   tag?: string | null;
@@ -86,7 +87,7 @@ export function pushToast(input: {
 export function pushBountyAlerts(alerts: BountyAlertPayload[]) {
   for (const a of alerts) {
     pushToast({
-      title: "声望赏金",
+      title: a.title,
       body: a.body,
       expiry: a.expiry,
       standingTag: a.tag ?? null,

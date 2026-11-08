@@ -213,8 +213,15 @@ function onFilterClick(key: FilterKey) {
   emit("update:vaultFilter", "all");
 }
 
+const statusOpts = computed(() =>
+  props.mode === "warframe"
+    ? WARFRAME_STATUS_FILTER_OPTS
+    : WARFRAME_STATUS_FILTER_OPTS.filter((o) => o.key !== "unmastered"),
+);
+
 function matchesStatus(f: WarframeListItem) {
   if (props.statusFilter === "all") return true;
+  if (props.statusFilter === "unmastered") return f.mastered === 0;
   return f.status === props.statusFilter;
 }
 
@@ -364,7 +371,7 @@ function variantClass(variant: number) {
       <div class="toolbar" style="padding-top: 0">
         <div class="seg">
           <button
-            v-for="o in WARFRAME_STATUS_FILTER_OPTS"
+            v-for="o in statusOpts"
             :key="String(o.key)"
             type="button"
             :class="{ on: statusFilter === o.key }"

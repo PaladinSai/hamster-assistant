@@ -7,7 +7,6 @@ use chrono::Utc;
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use crate::catalog::is_incarnon_genesis_family;
 use super::common::{id_to_str, load_part_relic_drops, open_pair, parse_id, PartDropDto};
 
 const WEAPON_VARIANT_KUVA: i32 = 2;
@@ -344,14 +343,11 @@ pub fn upsert_weapon_progress(data_dir: &Path, patch: UpsertWeaponProgress) -> R
     let (catalog, user) = open_pair(data_dir)?;
     let now = Utc::now().to_rfc3339();
 
-    let (variant, can_incarnon, family_key): (i32, i32, String) = catalog
+    let (variant, can_incarnon): (i32, i32) = catalog
         .query_row(
-            "SELECT w.variant, w.can_incarnon, f.family_key
-             FROM weapon w
-             JOIN weapon_family f ON f.id = w.family_id
-             WHERE w.id = ?1",
+            "SELECT variant, can_incarnon FROM weapon WHERE id = ?1",
             [weapon_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .map_err(|e| format!("武器 id={weapon_id} 不存在: {e}"))?;
 
@@ -381,13 +377,6 @@ pub fn upsert_weapon_progress(data_dir: &Path, patch: UpsertWeaponProgress) -> R
     let mut incarnon = patch.incarnon.unwrap_or(existing.incarnon);
     if can_incarnon == 0 {
         incarnon = 0;
-    } else if patch.incarnon.is_none()
-        && status == 1
-        && incarnon == 0
-        && !is_incarnon_genesis_family(&family_key)
-    {
-        // 自带灵化：已获取 → 自动进入「已有灵化之源」
-        incarnon = 2;
     }
     let wish = patch
         .wish

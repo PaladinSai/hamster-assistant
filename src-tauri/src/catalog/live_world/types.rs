@@ -439,6 +439,8 @@ pub struct BountyWatchView {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BountyAlertDto {
+    /// 弹窗标题，如「六人组 关注赏金」。
+    pub title: String,
     pub body: String,
     /// 赏金板过期时间（RFC3339）；弹窗到期自动关闭。
     pub expiry: Option<String>,

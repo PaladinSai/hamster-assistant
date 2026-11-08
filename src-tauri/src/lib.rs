@@ -92,7 +92,7 @@ fn push_bounty_notifications(app: &tauri::AppHandle, data_dir: &std::path::Path)
                 let _ = app
                     .notification()
                     .builder()
-                    .title("声望赏金")
+                    .title(&alert.title)
                     .body(&alert.body)
                     .show();
             }

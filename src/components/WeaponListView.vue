@@ -139,6 +139,8 @@ function matchesProgress(m: WeaponMemberDto) {
       return m.status === 2;
     case "owned":
       return m.status === 1;
+    case "unmastered":
+      return m.mastered === 0;
     default:
       return true;
   }

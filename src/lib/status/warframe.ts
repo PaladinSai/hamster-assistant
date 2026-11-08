@@ -16,7 +16,7 @@ export const WARFRAME_VAULT_FILTER_OPTS: {
 ];
 
 /** 进度状态筛选，与场景 FilterKey 独立、同时 AND */
-export type WarframeStatusFilter = "all" | 0 | 1 | 2 | 3;
+export type WarframeStatusFilter = "all" | 0 | 1 | 2 | 3 | "unmastered";
 
 export function baseStatusLabel(code: number): string {
   switch (code) {
@@ -96,6 +96,7 @@ export const WARFRAME_STATUS_FILTER_OPTS: {
 }[] = [
   { key: "all", label: "全部" },
   ...BASE_STATUS_OPTIONS.map((o) => ({ key: o.value, label: o.label })),
+  { key: "unmastered", label: "未掌握" },
 ];
 
 export const PRIME_STATUS_OPTIONS = BASE_STATUS_OPTIONS;

@@ -309,52 +309,30 @@ pub(crate) fn collect_new_alerts(
         let Some(board) = brief.boards.iter().find(|b| b.tag == watch.tag) else {
             continue;
         };
-        let mut job_lines = Vec::new();
-        let mut reward_lines = Vec::new();
-        let mut challenge_lines = Vec::new();
-        let mut seen_jobs = HashSet::new();
-        let mut seen_rewards = HashSet::new();
-        let mut seen_challenges = HashSet::new();
-
+        let mut blocks = Vec::new();
         for job in &board.jobs {
-            if job.is_advanced {
-                for id in &watch.jobs {
-                    if seen_jobs.contains(id) {
-                        continue;
-                    }
-                    if !localize_bounty::watch_job_matches(
-                        &board.tag,
-                        &job.job_type,
-                        &job.title,
-                        id,
-                    ) {
-                        continue;
-                    }
-                    seen_jobs.insert(id.clone());
-                    job_lines.push(job_line(job));
-                }
-            }
+            let job_hit = job.is_advanced
+                && watch.jobs.iter().any(|id| {
+                    localize_bounty::watch_job_matches(&board.tag, &job.job_type, &job.title, id)
+                });
+            let mut rewards = Vec::new();
             for reward in &watch.rewards {
-                if !job.rewards.iter().any(|name| name == reward) {
-                    continue;
-                }
-                let key = format!("{reward}|{}", job.title);
-                if !seen_rewards.insert(key) {
-                    continue;
-                }
-                reward_lines.push(format!("{reward} · {}", job.title));
-            }
-            for challenge in &watch.challenges {
-                if job.challenge_zh.trim() != challenge {
-                    continue;
-                }
-                if seen_challenges.insert(challenge.clone()) {
-                    challenge_lines.push(challenge.clone());
+                if job.rewards.iter().any(|name| name == reward) && !rewards.iter().any(|r| r == reward)
+                {
+                    rewards.push(reward.clone());
                 }
             }
+            let challenge_hit = watch
+                .challenges
+                .iter()
+                .any(|challenge| job.challenge_zh.trim() == challenge);
+            if !job_hit && rewards.is_empty() && !challenge_hit {
+                continue;
+            }
+            blocks.push(job_block(&board.tag, job, &rewards));
         }
 
-        if job_lines.is_empty() && reward_lines.is_empty() && challenge_lines.is_empty() {
+        if blocks.is_empty() {
             continue;
         }
         let fp = format!("{}|{}", board.tag, board.expiry.as_deref().unwrap_or(""));
@@ -363,7 +341,8 @@ pub(crate) fn collect_new_alerts(
         }
         new_fps.push(fp);
         alerts.push(BountyAlertDto {
-            body: alert_body(&board.name, &job_lines, &reward_lines, &challenge_lines),
+            title: format!("{} 关注赏金", board.name),
+            body: blocks.join("\n\n"),
             expiry: board.expiry.clone(),
             tag: board.tag.clone(),
         });
@@ -379,35 +358,65 @@ pub(crate) fn collect_new_alerts(
     alerts
 }
 
-fn job_line(job: &BountyJobApi) -> String {
-    let challenge = job.challenge_zh.trim();
-    let title = if challenge.is_empty() {
-        job.title.clone()
+/// 科维兽、六人组的普通档在钢铁之路按 1.5 倍向上取整。
+fn steel_bonus(tag: &str, standing: i32) -> Option<i32> {
+    if standing <= 0 || !matches!(tag, "EntratiLabSyndicate" | "HexSyndicate") {
+        return None;
+    }
+    let steel = (standing * 3 + 1) / 2;
+    if steel == standing {
+        None
     } else {
-        format!("{} · {challenge}", job.title)
-    };
-    if job.standing_total > 0 {
-        format!("{title}（声望 {}）", job.standing_total)
-    } else {
-        title
+        Some(steel)
     }
 }
 
-fn alert_body(name: &str, jobs: &[String], rewards: &[String], challenges: &[String]) -> String {
-    let mut body = format!("{name} 赏金命中");
-    if !jobs.is_empty() {
-        body.push_str("\n任务：");
-        body.push_str(&jobs.join("、"));
+fn challenge_meta(tag: &str, job: &BountyJobApi) -> Option<String> {
+    let mut parts = Vec::new();
+    let kind = job.kind_zh.trim();
+    if !kind.is_empty() {
+        parts.push(kind.to_string());
+    }
+    if job.min_enemy_level > 0 || job.max_enemy_level > 0 {
+        parts.push(format!(
+            "Lv {}–{}",
+            job.min_enemy_level, job.max_enemy_level
+        ));
+    }
+    if job.standing_total > 0 {
+        if job.is_steel_path {
+            parts.push(format!("钢铁声望 {}", job.standing_total));
+        } else if let Some(steel) = steel_bonus(tag, job.standing_total) {
+            parts.push(format!("声望 {} · 钢铁 {steel}", job.standing_total));
+        } else {
+            parts.push(format!("声望 {}", job.standing_total));
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" · "))
+    }
+}
+
+/// 任务名、挑战说明（没有就省掉）、类型等级声望。命中的掉落附在最后。
+fn job_block(tag: &str, job: &BountyJobApi, rewards: &[String]) -> String {
+    let mut lines = Vec::new();
+    let title = job.title.trim();
+    if !title.is_empty() {
+        lines.push(title.to_string());
+    }
+    let challenge = job.challenge_zh.trim();
+    if !challenge.is_empty() {
+        lines.push(challenge.to_string());
+    }
+    if let Some(meta) = challenge_meta(tag, job) {
+        lines.push(meta);
     }
     if !rewards.is_empty() {
-        body.push_str("\n掉落：");
-        body.push_str(&rewards.join("、"));
+        lines.push(format!("掉落：{}", rewards.join("、")));
     }
-    if !challenges.is_empty() {
-        body.push_str("\n挑战：");
-        body.push_str(&challenges.join("、"));
-    }
-    body
+    lines.join("\n")
 }
 
 #[cfg(test)]
@@ -494,7 +503,9 @@ mod tests {
         };
         let msgs = collect_new_alerts(&brief, &mut top);
         assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].title, "Ostron 关注赏金");
         assert!(msgs[0].body.contains("宰杀敌人"));
+        assert!(msgs[0].body.contains("声望 5020"));
         assert!(collect_new_alerts(&brief, &mut top).is_empty());
     }
 
@@ -512,6 +523,7 @@ mod tests {
         };
         let msgs = collect_new_alerts(&brief, &mut prefs);
         assert_eq!(msgs.len(), 1);
+        assert!(msgs[0].body.contains("捕获 Grineer 指挥官"));
         assert!(msgs[0].body.contains("掉落：内融核心"));
         assert!(!msgs[0].body.contains("任务："));
     }
@@ -531,7 +543,9 @@ mod tests {
         };
         let msgs = collect_new_alerts(&brief, &mut prefs);
         assert_eq!(msgs.len(), 1);
-        assert!(msgs[0].body.contains("挑战：找到一块耀金奖章并交给梅利卡"));
+        assert!(msgs[0].body.contains("捕获 Grineer 指挥官\n找到一块耀金奖章并交给梅利卡"));
+        assert!(msgs[0].body.contains("声望 1290"));
+        assert!(!msgs[0].body.contains("钢铁"));
     }
 
     #[test]
@@ -548,26 +562,31 @@ mod tests {
         };
         let msgs = collect_new_alerts(&brief, &mut prefs);
         assert_eq!(msgs.len(), 1);
-        assert!(msgs[0].body.contains("任务："));
+        assert_eq!(msgs[0].title, "Ostron 关注赏金");
+        assert!(msgs[0].body.contains("宰杀敌人"));
         assert!(msgs[0].body.contains("掉落：Gara 蓝图"));
     }
 
     #[test]
     fn challenge_hit_on_cycle_board() {
+        let mut job = job(
+            "/Lotus/Types/Challenges/Zariman/ZarimanFindMelicaCacheChallenge",
+            "歼灭 · 哈拉科防线",
+            5000,
+            true,
+            "找到一块耀金奖章并交给梅利卡",
+            &[],
+        );
+        job.kind_zh = "歼灭".into();
+        job.min_enemy_level = 90;
+        job.max_enemy_level = 100;
         let brief = BountyBriefApi {
             boards: vec![BountyBoardApi {
                 tag: "ZarimanSyndicate".into(),
                 name: "坚守者".into(),
                 activation: None,
                 expiry: Some("2026-10-02T00:00:00Z".into()),
-                jobs: vec![job(
-                    "/Lotus/Types/Challenges/Zariman/ZarimanFindMelicaCacheChallenge",
-                    "歼灭 · 哈拉科防线",
-                    5000,
-                    true,
-                    "找到一块耀金奖章并交给梅利卡",
-                    &[],
-                )],
+                jobs: vec![job],
             }],
             ..Default::default()
         };
@@ -582,8 +601,52 @@ mod tests {
         };
         let msgs = collect_new_alerts(&brief, &mut prefs);
         assert_eq!(msgs.len(), 1);
-        assert!(msgs[0].body.contains("挑战：找到一块耀金奖章并交给梅利卡"));
-        assert!(!msgs[0].body.contains("任务："));
+        assert_eq!(msgs[0].title, "坚守者 关注赏金");
+        assert!(msgs[0].body.starts_with("歼灭 · 哈拉科防线\n"));
+        assert!(msgs[0].body.contains("找到一块耀金奖章并交给梅利卡"));
+        assert!(msgs[0].body.contains("歼灭 · Lv 90–100 · 声望 5000"));
+        assert!(!msgs[0].body.contains("钢铁"));
+    }
+
+    #[test]
+    fn hex_challenge_alert_includes_type_level_and_steel() {
+        let mut job = job(
+            "/Lotus/Types/Challenges/Vania/VaniaExample",
+            "地狱净化：科腐者",
+            1000,
+            false,
+            "在完成任务之前找到并打开科腐者补给箱",
+            &[],
+        );
+        job.kind_zh = "生存".into();
+        job.min_enemy_level = 65;
+        job.max_enemy_level = 70;
+        let brief = BountyBriefApi {
+            boards: vec![BountyBoardApi {
+                tag: "HexSyndicate".into(),
+                name: "六人组".into(),
+                activation: None,
+                expiry: Some("2026-10-02T00:00:00Z".into()),
+                jobs: vec![job],
+            }],
+            ..Default::default()
+        };
+        let mut prefs = BountyWatchPrefs {
+            watches: vec![SyndicateWatch {
+                tag: "HexSyndicate".into(),
+                jobs: vec![],
+                rewards: vec![],
+                challenges: vec!["在完成任务之前找到并打开科腐者补给箱".into()],
+            }],
+            last_notified: vec![],
+        };
+        let msgs = collect_new_alerts(&brief, &mut prefs);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].title, "六人组 关注赏金");
+        assert_eq!(
+            msgs[0].body,
+            "地狱净化：科腐者\n在完成任务之前找到并打开科腐者补给箱\n生存 · Lv 65–70 · 声望 1000 · 钢铁 1500"
+        );
     }
 
     #[test]

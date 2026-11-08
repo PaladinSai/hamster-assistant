@@ -107,7 +107,7 @@ export function modularWeaponKindLabel(
 }
 
 /** 第三层：进度维（整枪 / 全部分类共用） */
-export type WeaponProgressFilter = "all" | "missing" | "progress" | "owned";
+export type WeaponProgressFilter = "all" | "missing" | "progress" | "owned" | "unmastered";
 
 /** 第三层：Prime 入库维（catalog） */
 export type WeaponVaultFilter = "all" | "unvaulted" | "vaulted" | "resurgence";

@@ -78,12 +78,14 @@ const progressOpts = computed((): { key: WeaponProgressFilter; label: string }[]
         { key: "all", label: "全部" },
         { key: "missing", label: "未获取" },
         { key: "owned", label: "已获取" },
+        { key: "unmastered", label: "未掌握" },
       ]
     : [
         { key: "all", label: "全部" },
         { key: "missing", label: "未获取" },
         { key: "progress", label: "蓝图已齐" },
         { key: "owned", label: "已获取" },
+        { key: "unmastered", label: "未掌握" },
       ],
 );
 

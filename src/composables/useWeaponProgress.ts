@@ -138,15 +138,11 @@ export function useWeaponProgress(opts: {
     const familyId = familyIdForWeapon(weaponId);
     if (!familyId) return;
 
-    let canIncarnon = 0;
-    let prevIncarnon = 0;
     let variant = 0;
     for (const list of familyLists()) {
       for (const f of list.value) {
         const m = f.members.find((x) => x.weaponId === weaponId);
         if (m) {
-          canIncarnon = m.canIncarnon;
-          prevIncarnon = m.incarnon;
           variant = m.variant;
           break;
         }
@@ -156,10 +152,6 @@ export function useWeaponProgress(opts: {
     await upsertWeaponProgress({ weaponId, status });
 
     const patch: Partial<WeaponFamilyListItem["members"][number]> = { status };
-    // 与后端一致：自带灵化在「已获取」时自动进「已有灵化之源」（创世改装边缘情况打开抽屉再对齐）
-    if (canIncarnon && status === 1 && prevIncarnon === 0) {
-      patch.incarnon = 2;
-    }
     patchLocalWeaponMember(familyId, weaponId, patch);
 
     if (weaponDetail.value?.family.familyId === familyId) {
