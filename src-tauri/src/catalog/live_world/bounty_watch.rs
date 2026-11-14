@@ -309,7 +309,7 @@ pub(crate) fn collect_new_alerts(
         let Some(board) = brief.boards.iter().find(|b| b.tag == watch.tag) else {
             continue;
         };
-        let mut blocks = Vec::new();
+        let mut hits: Vec<(&BountyJobApi, Vec<String>)> = Vec::new();
         for job in &board.jobs {
             let job_hit = job.is_advanced
                 && watch.jobs.iter().any(|id| {
@@ -329,8 +329,9 @@ pub(crate) fn collect_new_alerts(
             if !job_hit && rewards.is_empty() && !challenge_hit {
                 continue;
             }
-            blocks.push(job_block(&board.tag, job, &rewards));
+            hits.push((job, rewards));
         }
+        let blocks = grouped_blocks(&board.tag, &hits);
 
         if blocks.is_empty() {
             continue;
@@ -374,7 +375,8 @@ fn steel_bonus(tag: &str, standing: i32) -> Option<i32> {
 fn challenge_meta(tag: &str, job: &BountyJobApi) -> Option<String> {
     let mut parts = Vec::new();
     let kind = job.kind_zh.trim();
-    if !kind.is_empty() {
+    // 传承种收割这类任务，类型名和任务名是同一个字符串，等级行不再重复。
+    if !kind.is_empty() && kind != job.title.trim() {
         parts.push(kind.to_string());
     }
     if job.min_enemy_level > 0 || job.max_enemy_level > 0 {
@@ -399,19 +401,52 @@ fn challenge_meta(tag: &str, job: &BountyJobApi) -> Option<String> {
     }
 }
 
-/// 任务名、挑战说明（没有就省掉）、类型等级声望。命中的掉落附在最后。
-fn job_block(tag: &str, job: &BountyJobApi, rewards: &[String]) -> String {
+/// 任务名和挑战说明相同的档合成一段：标题和挑战各一次，每个等级档一行。
+fn grouped_blocks(tag: &str, hits: &[(&BountyJobApi, Vec<String>)]) -> Vec<String> {
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut keys: Vec<(String, String)> = Vec::new();
+    for (i, (job, _)) in hits.iter().enumerate() {
+        let key = (
+            job.title.trim().to_string(),
+            job.challenge_zh.trim().to_string(),
+        );
+        if let Some(pos) = keys.iter().position(|existing| existing == &key) {
+            groups[pos].push(i);
+        } else {
+            keys.push(key);
+            groups.push(vec![i]);
+        }
+    }
+    groups
+        .into_iter()
+        .map(|idxs| group_block(tag, hits, &idxs))
+        .collect()
+}
+
+/// 任务名、挑战说明（没有就省掉）、各档类型等级声望。命中的掉落合并在最后。
+fn group_block(tag: &str, hits: &[(&BountyJobApi, Vec<String>)], idxs: &[usize]) -> String {
     let mut lines = Vec::new();
-    let title = job.title.trim();
+    let (first, _) = &hits[idxs[0]];
+    let title = first.title.trim();
     if !title.is_empty() {
         lines.push(title.to_string());
     }
-    let challenge = job.challenge_zh.trim();
+    let challenge = first.challenge_zh.trim();
     if !challenge.is_empty() {
         lines.push(challenge.to_string());
     }
-    if let Some(meta) = challenge_meta(tag, job) {
-        lines.push(meta);
+    for &i in idxs {
+        if let Some(meta) = challenge_meta(tag, hits[i].0) {
+            lines.push(meta);
+        }
+    }
+    let mut rewards = Vec::new();
+    for &i in idxs {
+        for reward in &hits[i].1 {
+            if !rewards.iter().any(|existing| existing == reward) {
+                rewards.push(reward.clone());
+            }
+        }
     }
     if !rewards.is_empty() {
         lines.push(format!("掉落：{}", rewards.join("、")));
@@ -647,6 +682,58 @@ mod tests {
             msgs[0].body,
             "地狱净化：科腐者\n在完成任务之前找到并打开科腐者补给箱\n生存 · Lv 65–70 · 声望 1000 · 钢铁 1500"
         );
+    }
+
+    #[test]
+    fn same_title_and_challenge_merge_into_one_block() {
+        let mut high = job(
+            "SolNode850",
+            "传承种收割",
+            7500,
+            true,
+            "在完成任务之前找到并打开科腐者补给箱",
+            &["内融核心"],
+        );
+        high.kind_zh = "传承种收割".into();
+        high.min_enemy_level = 125;
+        high.max_enemy_level = 130;
+        let mut low = job(
+            "SolNode850",
+            "传承种收割",
+            6000,
+            false,
+            "在完成任务之前找到并打开科腐者补给箱",
+            &["Gara 蓝图"],
+        );
+        low.kind_zh = "传承种收割".into();
+        low.min_enemy_level = 115;
+        low.max_enemy_level = 120;
+        let brief = BountyBriefApi {
+            boards: vec![BountyBoardApi {
+                tag: "HexSyndicate".into(),
+                name: "六人组".into(),
+                activation: None,
+                expiry: Some("2026-10-02T00:00:00Z".into()),
+                jobs: vec![high, low],
+            }],
+            ..Default::default()
+        };
+        let mut prefs = BountyWatchPrefs {
+            watches: vec![SyndicateWatch {
+                tag: "HexSyndicate".into(),
+                jobs: vec!["SolNode850".into()],
+                rewards: vec!["内融核心".into(), "Gara 蓝图".into()],
+                challenges: vec!["在完成任务之前找到并打开科腐者补给箱".into()],
+            }],
+            last_notified: vec![],
+        };
+        let msgs = collect_new_alerts(&brief, &mut prefs);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(
+            msgs[0].body,
+            "传承种收割\n在完成任务之前找到并打开科腐者补给箱\nLv 125–130 · 声望 7500 · 钢铁 11250\nLv 115–120 · 声望 6000 · 钢铁 9000\n掉落：内融核心、Gara 蓝图"
+        );
+        assert_eq!(msgs[0].body.matches("传承种收割").count(), 1);
     }
 
     #[test]

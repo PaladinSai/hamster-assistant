@@ -94,10 +94,13 @@ function onAction(id: string, run: () => void) {
   display: flex;
   flex-direction: column-reverse;
   gap: 10px;
+  width: min(360px, calc(100vw - 32px));
   max-width: min(360px, calc(100vw - 32px));
   pointer-events: none;
 }
 .toast-card {
+  box-sizing: border-box;
+  width: 100%;
   pointer-events: auto;
   background: var(--bg-elevated);
   border: 1px solid var(--line);
